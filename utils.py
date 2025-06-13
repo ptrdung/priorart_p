@@ -1,5 +1,5 @@
 """
-Utilities và helper functions cho hệ thống trích xuất từ khóa
+Utilities and helper functions for keyword extraction system
 """
 
 import json
@@ -8,11 +8,11 @@ from core_concept_extractor import SeedKeywords, ConceptMatrix
 
 
 class KeywordAnalyzer:
-    """Phân tích và đánh giá chất lượng từ khóa"""
+    """Analyze and evaluate keyword quality"""
     
     @staticmethod
     def analyze_keyword_quality(keywords: SeedKeywords) -> Dict[str, any]:
-        """Phân tích chất lượng từ khóa"""
+        """Analyze keyword quality"""
         analysis = {
             "total_keywords": 0,
             "category_distribution": {},
@@ -32,7 +32,7 @@ class KeywordAnalyzer:
                 all_keywords.append(keyword)
                 analysis["keyword_lengths"].append(len(keyword.split()))
         
-        # Tính điểm chất lượng
+        # Calculate quality score
         if analysis["total_keywords"] > 0:
             avg_length = sum(analysis["keyword_lengths"]) / len(analysis["keyword_lengths"])
             balance_score = min(1.0, len([c for c in analysis["category_distribution"].values() if c > 0]) / 6)
@@ -40,26 +40,33 @@ class KeywordAnalyzer:
             
             analysis["quality_score"] = (balance_score + length_score) / 2
         
-        # Đề xuất cải thiện
+        # Improvement recommendations
         empty_categories = [cat for cat, count in analysis["category_distribution"].items() if count == 0]
         if empty_categories:
-            analysis["recommendations"].append(f"Cần bổ sung từ khóa cho: {', '.join(empty_categories)}")
+            analysis["recommendations"].append(f"Need to add keywords for: {', '.join(empty_categories)}")
         
         if analysis["quality_score"] < 0.7:
-            analysis["recommendations"].append("Chất lượng từ khóa cần cải thiện")
+            analysis["recommendations"].append("Keyword quality needs improvement")
+        
+        # Additional recommendations for the new workflow
+        if analysis["total_keywords"] < 6:
+            analysis["recommendations"].append("Consider adding more keywords for better coverage")
+        
+        if any(len(keyword_list) == 0 for keyword_list in keywords.dict().values()):
+            analysis["recommendations"].append("Some categories are missing keywords entirely")
         
         return analysis
     
     @staticmethod
     def export_to_json(results: Dict, filename: str):
-        """Xuất kết quả ra file JSON"""
+        """Export results to JSON file"""
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
-        print(f"✅ Đã xuất kết quả ra file: {filename}")
+        print(f"✅ Results exported to file: {filename}")
     
     @staticmethod
     def format_for_search_engine(keywords: SeedKeywords) -> Dict[str, List[str]]:
-        """Format từ khóa cho công cụ tìm kiếm sáng chế"""
+        """Format keywords for patent search engines"""
         formatted = {
             "primary_keywords": [],
             "secondary_keywords": [],
@@ -86,18 +93,18 @@ class KeywordAnalyzer:
 
 
 class PatentSearchQuery:
-    """Tạo truy vấn tìm kiếm sáng chế từ từ khóa"""
+    """Create patent search queries from keywords"""
     
     @staticmethod
     def create_boolean_query(keywords: SeedKeywords) -> str:
-        """Tạo truy vấn Boolean cho database sáng chế"""
+        """Create Boolean query for patent databases"""
         primary = keywords.problem_purpose + keywords.object_system + keywords.key_technical_feature
         secondary = keywords.action_method + keywords.advantage_result
         
         query_parts = []
         
         if primary:
-            primary_query = " OR ".join([f'"{kw}"' for kw in primary[:3]])  # Lấy 3 từ khóa quan trọng nhất
+            primary_query = " OR ".join([f'"{kw}"' for kw in primary[:3]])  # Take 3 most important keywords
             query_parts.append(f"({primary_query})")
         
         if secondary:
@@ -112,19 +119,19 @@ class PatentSearchQuery:
     
     @staticmethod
     def create_natural_query(keywords: SeedKeywords) -> str:
-        """Tạo truy vấn ngôn ngữ tự nhiên"""
+        """Create natural language query"""
         all_keywords = []
         for keyword_list in keywords.dict().values():
             all_keywords.extend(keyword_list)
         
-        # Chọn các từ khóa quan trọng nhất
-        important_keywords = all_keywords[:8]  # Giới hạn 8 từ khóa
+        # Select most important keywords
+        important_keywords = all_keywords[:8]  # Limit to 8 keywords
         
         return " ".join(important_keywords)
 
 
 class ReportGenerator:
-    """Tạo báo cáo chi tiết"""
+    """Generate detailed reports"""
     
     @staticmethod
     def generate_extraction_report(
@@ -133,27 +140,27 @@ class ReportGenerator:
         final_keywords: SeedKeywords,
         messages: List[str]
     ) -> str:
-        """Tạo báo cáo chi tiết quá trình trích xuất"""
+        """Generate detailed extraction process report"""
         
         analyzer = KeywordAnalyzer()
         analysis = analyzer.analyze_keyword_quality(final_keywords)
         search_query = PatentSearchQuery()
         
         report = f"""
-# BÁO CÁO TRÍCH XUẤT TỪ KHÓA GỐC SÁNG CHẾ
+# PATENT SEED KEYWORD EXTRACTION REPORT
 
-## 📄 Nội dung đầu vào
+## 📄 Input Content
 {input_text[:500]}{'...' if len(input_text) > 500 else ''}
 
-## 📋 Ma trận Khái niệm
-- **Vấn đề/Mục tiêu**: {concept_matrix.problem_purpose}
-- **Đối tượng/Hệ thống**: {concept_matrix.object_system}
-- **Hành động/Phương pháp**: {concept_matrix.action_method}
-- **Đặc điểm kỹ thuật**: {concept_matrix.key_technical_feature}
-- **Môi trường/Lĩnh vực**: {concept_matrix.environment_field}
-- **Lợi ích/Kết quả**: {concept_matrix.advantage_result}
+## 📋 Concept Matrix
+- **Problem/Purpose**: {concept_matrix.problem_purpose}
+- **Object/System**: {concept_matrix.object_system}
+- **Action/Method**: {concept_matrix.action_method}
+- **Key Technical Feature**: {concept_matrix.key_technical_feature}
+- **Environment/Field**: {concept_matrix.environment_field}
+- **Advantage/Result**: {concept_matrix.advantage_result}
 
-## 🔑 Từ khóa gốc cuối cùng
+## 🔑 Final seed keywords
 """
         
         for category, keywords in final_keywords.dict().items():
@@ -161,25 +168,25 @@ class ReportGenerator:
             report += f"- **{category_name}**: {', '.join(keywords)}\n"
         
         report += f"""
-## 📊 Phân tích chất lượng
-- **Tổng số từ khóa**: {analysis['total_keywords']}
-- **Điểm chất lượng**: {analysis['quality_score']:.2f}/1.0
-- **Chiều dài trung bình**: {sum(analysis['keyword_lengths'])/len(analysis['keyword_lengths']):.1f} từ
+## 📊 Quality Analysis
+- **Total keywords**: {analysis['total_keywords']}
+- **Quality score**: {analysis['quality_score']:.2f}/1.0
+- **Average length**: {sum(analysis['keyword_lengths'])/len(analysis['keyword_lengths']):.1f} words
 
-### Phân bố theo danh mục:
+### Category distribution:
 """
         
         for category, count in analysis['category_distribution'].items():
             category_name = category.replace('_', ' ').title()
-            report += f"- {category_name}: {count} từ khóa\n"
+            report += f"- {category_name}: {count} keywords\n"
         
         if analysis['recommendations']:
-            report += "\n### 💡 Đề xuất cải thiện:\n"
+            report += "\n### 💡 Improvement recommendations:\n"
             for rec in analysis['recommendations']:
                 report += f"- {rec}\n"
         
         report += f"""
-## 🔍 Truy vấn tìm kiếm đề xuất
+## 🔍 Recommended search queries
 
 ### Boolean Query:
 ```
@@ -191,7 +198,7 @@ class ReportGenerator:
 {search_query.create_natural_query(final_keywords)}
 ```
 
-## 📝 Lịch sử xử lý
+## 📝 Processing history
 """
         
         for i, message in enumerate(messages, 1):

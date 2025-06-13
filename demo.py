@@ -1,5 +1,5 @@
 """
-Demo script cho hệ thống trích xuất từ khóa gốc sáng chế
+Demo script for patent seed keyword extraction system
 """
 
 from core_concept_extractor import CoreConceptExtractor
@@ -7,27 +7,27 @@ import json
 
 
 def demo_with_sample_patents():
-    """Demo với các mẫu sáng chế khác nhau"""
+    """Demo with different patent samples"""
     
     extractor = CoreConceptExtractor(model_name="llama3")
     
     samples = [
         {
-            "title": "Hệ thống tưới tiêu thông minh",
+            "title": "Smart Irrigation System",
             "text": """
-            Hệ thống tưới tiêu thông minh sử dụng cảm biến độ ẩm đất và dữ liệu thời tiết 
-            để tự động điều khiển lịch tưới nước. Hệ thống bao gồm các cảm biến IoT, 
-            bộ điều khiển trung tâm và ứng dụng di động. Giúp tiết kiệm nước lên đến 30% 
-            và tối ưu hóa việc chăm sóc cây trồng trong nông nghiệp và làm vườn.
+            A smart irrigation system that uses soil moisture sensors and weather data 
+            to automatically control irrigation schedules. The system includes IoT sensors, 
+            a central controller, and a mobile application. It helps save up to 30% water 
+            and optimizes plant care in agriculture and gardening.
             """
         },
         {
-            "title": "Robot dọn dẹp tự động",
+            "title": "Autonomous Cleaning Robot",
             "text": """
-            Robot dọn dẹp sử dụng công nghệ LIDAR và AI để lập bản đồ không gian,
-            tránh vật cản và dọn dẹp hiệu quả. Robot có khả năng hút bụi, lau nhà
-            và tự động trở về trạm sạc. Ứng dụng trong gia đình và văn phòng,
-            giảm 80% thời gian dọn dẹp thủ công.
+            A cleaning robot that uses LIDAR technology and AI to map spaces,
+            avoid obstacles, and clean efficiently. The robot can vacuum, mop floors
+            and automatically return to charging station. Applications in homes and offices,
+            reducing manual cleaning time by 80%.
             """
         }
     ]
@@ -39,53 +39,62 @@ def demo_with_sample_patents():
         
         results = extractor.extract_keywords(sample['text'])
         
-        print(f"\n📋 Kết quả cho '{sample['title']}':")
+        print(f"\n📋 Results for '{sample['title']}':")
         print(json.dumps(results, indent=2, ensure_ascii=False))
 
 
 def interactive_mode():
-    """Chế độ tương tác cho người dùng nhập liệu"""
+    """Interactive mode for user input"""
     
     extractor = CoreConceptExtractor(model_name="llama3")
     
-    print("🚀 CHÀO MỪNG ĐÁN HỆ THỐNG TRÍCH XUẤT TỪ KHÓA GỐC SÁNG CHẾ")
+    print("🚀 WELCOME TO PATENT SEED KEYWORD EXTRACTION SYSTEM")
     print("="*70)
+    print("✨ New Workflow: Automatic refinement with final human evaluation")
+    print("   • Phases 1-3 run automatically")
+    print("   • You evaluate final results and can approve, edit, or re-run")
     
     while True:
-        print("\nVui lòng nhập mô tả ý tưởng hoặc tài liệu kỹ thuật:")
-        print("(Nhập 'quit' để thoát)")
+        print("\nPlease enter your idea description or technical document:")
+        print("(Type 'quit' to exit)")
         
-        user_input = input("\n📝 Nội dung: ").strip()
+        user_input = input("\n📝 Content: ").strip()
         
-        if user_input.lower() in ['quit', 'exit', 'thoát']:
-            print("👋 Cảm ơn bạn đã sử dụng hệ thống!")
+        if user_input.lower() in ['quit', 'exit']:
+            print("👋 Thank you for using the system!")
             break
         
         if not user_input:
-            print("⚠️ Vui lòng nhập nội dung hợp lệ!")
+            print("⚠️ Please enter valid content!")
             continue
         
         try:
-            print("\n🔄 Đang xử lý...")
+            print("\n🔄 Processing through all 3 phases...")
             results = extractor.extract_keywords(user_input)
             
             print("\n" + "="*60)
-            print("📊 KẾT QUẢ TRÍCH XUẤT")
+            print("📊 EXTRACTION RESULTS")
             print("="*60)
             
             if results['final_keywords']:
-                print("\n🔑 Từ khóa gốc cuối cùng:")
+                print("\n🔑 Final seed keywords:")
                 for category, keywords in results['final_keywords'].items():
                     category_name = category.replace('_', ' ').title()
                     print(f"  • {category_name}: {keywords}")
             
-            print(f"\n📝 Lịch sử xử lý:")
+            print(f"\n📝 Processing history:")
             for msg in results['messages']:
                 print(f"  → {msg}")
+            
+            # Handle user action if they chose to re-run
+            user_action = results.get('user_action')
+            if user_action == 'rerun':
+                print("\n🔄 Re-running with your feedback...")
+                # The re-run is handled within the workflow
                 
         except Exception as e:
-            print(f"❌ Lỗi: {str(e)}")
-            print("Vui lòng thử lại với nội dung khác.")
+            print(f"❌ Error: {str(e)}")
+            print("Please try again with different content.")
 
 
 if __name__ == "__main__":

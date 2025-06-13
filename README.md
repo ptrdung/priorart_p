@@ -1,95 +1,124 @@
-# Hệ thống Trích xuất Từ khóa Gốc Sáng chế
+# Patent Seed Keyword Extraction System
 
-Hệ thống triển khai phương pháp 3 pha để trích xuất từ khóa gốc từ tài liệu kỹ thuật/sáng chế sử dụng LangChain, LangGraph và Ollama.
+A system implementing a 3-phase methodology to extract seed keywords from technical/patent documents using LangChain, LangGraph and Ollama.
 
-## 🏗️ Kiến trúc
+## 🏗️ Architecture
 
-- **LangChain**: Tích hợp LLM và xử lý prompt
-- **LangGraph**: Workflow với human-in-the-loop
+- **LangChain**: LLM integration and prompt processing
+- **LangGraph**: Workflow with human-in-the-loop
 - **Ollama**: Local LLM (Llama3)
-- **Pydantic**: Data validation và structure
+- **Pydantic**: Data validation and structure
 
-## 📦 Cài đặt
+## 📦 Installation
 
 ```bash
-# Cài đặt dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# Cài đặt Ollama (nếu chưa có)
+# Install Ollama (if not already installed)
 # https://ollama.ai/
 
-# Pull model Llama3
+# Pull Llama3 model
 ollama pull llama3
 ```
 
-## 🚀 Sử dụng
+## 🚀 Usage
 
-### 1. Chế độ tương tác
+### 1. Interactive mode
 
 ```bash
 python demo.py
 ```
 
-### 2. Chạy demo với mẫu có sẵn
+### 2. Run demo with sample data
 
 ```bash
 python demo.py demo
 ```
 
-### 3. Sử dụng programmatically
+### 3. Use programmatically
 
 ```python
 from core_concept_extractor import CoreConceptExtractor
 
 extractor = CoreConceptExtractor(model_name="llama3")
-results = extractor.extract_keywords("Mô tả sáng chế của bạn...")
+results = extractor.extract_keywords("Your patent description...")
 ```
 
-## 📋 Quy trình 3 pha
+## 📋 3-Phase Process
 
-### Pha 1: Trừu tượng hóa & Định nghĩa Khái niệm
+### Phase 1: Abstraction & Concept Definition
 
-- Phân tích tài liệu đầu vào
-- Tạo Ma trận Khái niệm với 6 thành phần
+- Analyze input document
+- Create Concept Matrix with 6 components
 
-### Pha 2: Trích xuất Từ khóa Gốc
+### Phase 2: Initial Seed Keyword Extraction
 
-- Từ Ma trận Khái niệm → 1-3 từ khóa/thành phần
-- Ưu tiên danh từ kỹ thuật và động từ chính
+- From Concept Matrix → 1-3 keywords/component
+- Prioritize technical nouns and main verbs
 
-### Pha 3: Kiểm tra & Tinh chỉnh
+### Phase 3: Automatic Refinement & Quality Enhancement
 
-- Human-in-the-loop validation
-- Cải thiện dựa trên feedback người dùng
+- Automatically improve keyword quality and specificity
+- Optimize for patent search effectiveness
+- Ensure technical precision and coverage
 
-## 📁 Cấu trúc File
+### Final Human Evaluation
+
+- Review complete results only at the end
+- Three options available:
+  1. **Approve**: Accept results as final
+  2. **Manual Edit**: Directly modify keywords
+  3. **Re-run**: Restart process with feedback
+
+## 🆕 Workflow Improvements
+
+### Enhanced User Experience
+- **Streamlined Process**: Phases 1-3 run automatically without interruption
+- **Final Review**: Human evaluation only at the end with complete results
+- **Flexible Actions**: Three clear options for final results handling
+- **Direct Editing**: Modify keywords immediately without going through refinement cycles
+- **Smart Re-runs**: Restart with specific feedback for targeted improvements
+
+### Benefits
+- ⚡ **Faster Processing**: No intermediate stops for validation
+- 🎯 **Better Focus**: Evaluate complete results rather than partial outputs  
+- ✏️ **Direct Control**: Manual editing capability for precise adjustments
+- 🔄 **Efficient Iterations**: Targeted re-runs with specific feedback
+- 📈 **Higher Quality**: Automatic refinement ensures consistent baseline quality
+
+## 📁 File Structure
 
 ```text
 priorart_project/
 ├── requirements.txt          # Dependencies
 ├── core_concept_extractor.py # Core system logic
-├── demo.py                   # Demo và interactive mode  
-├── utils.py                  # Utilities và analysis tools
+├── prompts.py                # Prompt templates and messages
+├── demo.py                   # Demo and interactive mode  
+├── utils.py                  # Utilities and analysis tools
 └── README.md                 # Documentation
 ```
 
-## 🔧 Tính năng
+## 🔧 Features
 
-- ✅ Workflow 3 pha tự động
-- ✅ Human-in-the-loop validation
-- ✅ Phân tích chất lượng từ khóa
-- ✅ Tạo truy vấn tìm kiếm Boolean/Natural Language
-- ✅ Báo cáo chi tiết quá trình
-- ✅ Export JSON results
+- ✅ Automated 3-phase workflow
+- ✅ Automatic keyword refinement and quality enhancement
+- ✅ Final human evaluation with multiple options
+- ✅ Direct manual editing capability
+- ✅ Re-run option with feedback
+- ✅ Keyword quality analysis
+- ✅ Boolean/Natural Language search query generation
+- ✅ Detailed process reporting
+- ✅ JSON results export
 
 ## 🎯 Output
 
-Hệ thống tạo ra:
+The system generates:
 
-1. **Ma trận Khái niệm**: 6 thành phần cốt lõi
-2. **Từ khóa gốc**: 1-3 từ khóa/thành phần  
-3. **Truy vấn tìm kiếm**: Boolean và Natural Language
-4. **Báo cáo chất lượng**: Phân tích và đề xuất
+1. **Concept Matrix**: 6 core components
+2. **Seed Keywords**: 1-3 keywords/component  
+3. **Search Queries**: Boolean and Natural Language
+4. **Quality Report**: Analysis and recommendations
 
 ## 📊 Example Output
 
