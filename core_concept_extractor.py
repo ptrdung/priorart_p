@@ -98,16 +98,17 @@ class CoreConceptExtractor:
     
     def phase1_concept_extraction(self, state: ExtractionState) -> ExtractionState:
         """Phase 1: Abstraction & Concept Definition"""
-        prompt = self.prompts.get_phase1_prompt()
+        prompt, parser = self.prompts.get_phase1_prompt_and_parser()
         
         response = self.llm.invoke(prompt.format(input_text=state["input_text"]))
         
         try:
-            # Parse JSON response
-            concept_data = json.loads(response.strip())
-            concept_matrix = ConceptMatrix(**concept_data)
-        except:
-            # Fallback parsing if JSON is invalid
+            # Use LangChain parser
+            concept_data = parser.parse(response)
+            concept_matrix = ConceptMatrix(**concept_data.dict())
+        except Exception as e:
+            print(f"Parser failed: {e}, falling back to manual parsing")
+            # Fallback parsing if structured parsing fails
             concept_matrix = self._parse_concept_response(response)
         
         state["concept_matrix"] = concept_matrix
@@ -120,14 +121,16 @@ class CoreConceptExtractor:
         """Phase 2: Seed Keyword Extraction"""
         concept_matrix = state["concept_matrix"]
         
-        prompt = self.prompts.get_phase2_prompt()
+        prompt, parser = self.prompts.get_phase2_prompt_and_parser()
         
         response = self.llm.invoke(prompt.format(**concept_matrix.dict()))
         
         try:
-            keyword_data = json.loads(response.strip())
-            seed_keywords = SeedKeywords(**keyword_data)
-        except:
+            # Use LangChain parser
+            keyword_data = parser.parse(response)
+            seed_keywords = SeedKeywords(**keyword_data.dict())
+        except Exception as e:
+            print(f"Parser failed: {e}, falling back to manual parsing")
             seed_keywords = self._parse_keyword_response(response)
         
         state["seed_keywords"] = seed_keywords
@@ -141,7 +144,7 @@ class CoreConceptExtractor:
         concept_matrix = state["concept_matrix"]
         current_keywords = state["seed_keywords"]
         
-        prompt = self.prompts.get_phase3_auto_prompt()
+        prompt, parser = self.prompts.get_phase3_auto_prompt_and_parser()
         
         response = self.llm.invoke(prompt.format(
             concept_matrix=concept_matrix.dict(),
@@ -149,9 +152,11 @@ class CoreConceptExtractor:
         ))
         
         try:
-            refined_data = json.loads(response.strip())
-            refined_keywords = SeedKeywords(**refined_data)
-        except:
+            # Use LangChain parser
+            refined_data = parser.parse(response)
+            refined_keywords = SeedKeywords(**refined_data.dict())
+        except Exception as e:
+            print(f"Parser failed: {e}, falling back to manual parsing")
             refined_keywords = self._parse_keyword_response(response)
         
         state["seed_keywords"] = refined_keywords
@@ -284,6 +289,41 @@ class CoreConceptExtractor:
             advantage_result=["extracted_keyword"]
         )
     
+    def _rerun_with_feedback(self, input_text: str, feedback: str) -> SeedKeywords:
+        """Handle re-run with user feedback using structured parser"""
+        # First extract concept matrix
+        prompt1, parser1 = self.prompts.get_phase1_prompt_and_parser()
+        response1 = self.llm.invoke(prompt1.format(input_text=input_text))
+        
+        try:
+            concept_data = parser1.parse(response1)
+            concept_matrix = ConceptMatrix(**concept_data.dict())
+        except:
+            concept_matrix = self._parse_concept_response(response1)
+        
+        # Extract initial keywords
+        prompt2, parser2 = self.prompts.get_phase2_prompt_and_parser()
+        response2 = self.llm.invoke(prompt2.format(**concept_matrix.dict()))
+        
+        try:
+            keyword_data = parser2.parse(response2)
+            initial_keywords = SeedKeywords(**keyword_data.dict())
+        except:
+            initial_keywords = self._parse_keyword_response(response2)
+        
+        # Apply feedback-based refinement
+        prompt3, parser3 = self.prompts.get_phase3_prompt_and_parser()
+        response3 = self.llm.invoke(prompt3.format(
+            current_keywords=initial_keywords.dict(),
+            feedback=feedback
+        ))
+        
+        try:
+            refined_data = parser3.parse(response3)
+            return SeedKeywords(**refined_data.dict())
+        except:
+            return self._parse_keyword_response(response3)
+    
     def extract_keywords(self, input_text: str) -> Dict:
         """Run the complete keyword extraction workflow"""
         initial_state = ExtractionState(
@@ -320,6 +360,11 @@ class CoreConceptExtractor:
         # Add feedback to initial state if provided (for re-runs)
         if feedback:
             initial_state["messages"].append(f"Re-run with feedback: {feedback}")
+            # Directly handle re-run with feedback using structured parsers
+            final_keywords = self._rerun_with_feedback(input_text, feedback)
+            initial_state["final_keywords"] = final_keywords
+            initial_state["current_phase"] = "completed"
+            initial_state["messages"].append(self.messages["extraction_completed"])
         
         # Run workflow
         result = self.graph.invoke(initial_state)
@@ -330,10 +375,25 @@ class CoreConceptExtractor:
             "messages": result["messages"],
             "user_action": result.get("validation_feedback", {}).action if result.get("validation_feedback") else None
         }
+    
+    def _parse_with_fixing(self, response: str, parser, fallback_method):
+        """Parse response with output fixing parser and fallback"""
+        try:
+            # Try standard parser first
+            return parser.parse(response)
+        except Exception as e:
+            print(f"Standard parser failed: {e}")
+            try:
+                # Try output fixing parser
+                fixing_parser = self.prompts.create_output_fixing_parser(parser, self.llm)
+                return fixing_parser.parse(response)
+            except Exception as e2:
+                print(f"Fixing parser also failed: {e2}, using fallback")
+                return fallback_method(response)
 
 
 if __name__ == "__main__":
-    # Example usage
+    # Example usage with structured parsers
     extractor = CoreConceptExtractor(model_name="llama3")
     
     sample_text = """
@@ -342,10 +402,27 @@ if __name__ == "__main__":
     optimize plant care in agriculture and gardening.
     """
     
-    print("🚀 Starting patent seed keyword extraction...")
+    print("🚀 Starting patent seed keyword extraction with LangChain parsers...")
+    print("📋 Using structured output parsing for better reliability")
+    
     results = extractor.extract_keywords(sample_text)
     
     print("\n" + "="*60)
     print("📊 FINAL RESULTS")
     print("="*60)
     print(json.dumps(results, indent=2, ensure_ascii=False))
+    
+    # Test individual parser components
+    print("\n" + "="*60)
+    print("🧪 TESTING PARSER COMPONENTS")
+    print("="*60)
+    
+    # Test concept matrix parser
+    concept_parser = extractor.prompts.get_concept_matrix_parser()
+    print(f"✅ Concept Matrix Parser: {type(concept_parser).__name__}")
+    
+    # Test seed keywords parser  
+    keywords_parser = extractor.prompts.get_seed_keywords_parser()
+    print(f"✅ Seed Keywords Parser: {type(keywords_parser).__name__}")
+    
+    print("\n🎉 All parsers loaded successfully!")

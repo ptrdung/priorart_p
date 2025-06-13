@@ -3,138 +3,157 @@ Prompt templates for patent seed keyword extraction system
 """
 
 from langchain.prompts import PromptTemplate
+from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
+from langchain_core.output_parsers import JsonOutputParser
+from pydantic import BaseModel, Field
+from typing import List
 
 
 class ExtractionPrompts:
     """Collection of prompt templates for the 3-phase extraction process"""
     
     @staticmethod
-    def get_phase1_prompt() -> PromptTemplate:
-        """Phase 1: Concept Matrix extraction prompt"""
-        return PromptTemplate.from_template("""
-        Analyze the following technical document and extract information for the Concept Matrix:
-
-        Document: {input_text}
-
-        Please fill in concise information for each component (1-2 short sentences):
-
-        1. Problem/Purpose: What problem does this solve or what is the main objective?
-        2. Object/System: What is the main object, device, or system being described?
-        3. Action/Method: What actions, processes, or methods are performed?
-        4. Key Technical Feature/Structure: What are the core technical features or structural elements?
-        5. Environment/Field: What is the application domain or operating environment?
-        6. Advantage/Result: What benefits or results are achieved?
-
-        Return in JSON format with keys: problem_purpose, object_system, action_method, key_technical_feature, environment_field, advantage_result
+    def get_phase1_prompt_and_parser():
+        """Phase 1: Concept Matrix extraction prompt with parser"""
+        parser = PydanticOutputParser(pydantic_object=ConceptMatrixOutput)
         
-        Example:
-        {{
-            "problem_purpose": "Reduce water waste in irrigation systems",
-            "object_system": "Smart irrigation control system",
-            "action_method": "Automated scheduling and moisture monitoring",
-            "key_technical_feature": "Soil moisture sensors and weather data integration",
-            "environment_field": "Agriculture and gardening applications",
-            "advantage_result": "30% water savings and optimized plant care"
-        }}
-        """)
+        prompt = PromptTemplate(
+            template="""
+            Analyze the following technical document and extract information for the Concept Matrix:
+
+            Document: {input_text}
+
+            Please fill in concise information for each component (1-2 short sentences):
+
+            1. Problem/Purpose: What problem does this solve or what is the main objective?
+            2. Object/System: What is the main object, device, or system being described?
+            3. Action/Method: What actions, processes, or methods are performed?
+            4. Key Technical Feature/Structure: What are the core technical features or structural elements?
+            5. Environment/Field: What is the application domain or operating environment?
+            6. Advantage/Result: What benefits or results are achieved?
+
+            {format_instructions}
+            """,
+            input_variables=["input_text"],
+            partial_variables={"format_instructions": parser.get_format_instructions()}
+        )
+        
+        return prompt, parser
+    
+    @staticmethod
+    def get_phase1_prompt() -> PromptTemplate:
+        """Legacy method for backward compatibility"""
+        prompt, _ = ExtractionPrompts.get_phase1_prompt_and_parser()
+        return prompt
+    
+    @staticmethod
+    def get_phase2_prompt_and_parser():
+        """Phase 2: Seed keyword extraction prompt with parser"""
+        parser = PydanticOutputParser(pydantic_object=SeedKeywordsOutput)
+        
+        prompt = PromptTemplate(
+            template="""
+            From the following Concept Matrix, extract 1-3 distinctive technical keywords/phrases for each component.
+            Focus on:
+            - Technical nouns and specific terminology
+            - Action verbs and processes
+            - Avoid overly general terms like "system", "method", "device" without qualifiers
+            - Prioritize terms that would be useful for patent search
+
+            Concept Matrix:
+            - Problem/Purpose: {problem_purpose}
+            - Object/System: {object_system}
+            - Action/Method: {action_method}
+            - Key Technical Feature: {key_technical_feature}
+            - Environment/Field: {environment_field}
+            - Advantage/Result: {advantage_result}
+
+            {format_instructions}
+            """,
+            input_variables=["problem_purpose", "object_system", "action_method", 
+                           "key_technical_feature", "environment_field", "advantage_result"],
+            partial_variables={"format_instructions": parser.get_format_instructions()}
+        )
+        
+        return prompt, parser
     
     @staticmethod
     def get_phase2_prompt() -> PromptTemplate:
-        """Phase 2: Seed keyword extraction prompt"""
-        return PromptTemplate.from_template("""
-        From the following Concept Matrix, extract 1-3 distinctive technical keywords/phrases for each component.
-        Focus on:
-        - Technical nouns and specific terminology
-        - Action verbs and processes
-        - Avoid overly general terms like "system", "method", "device" without qualifiers
-        - Prioritize terms that would be useful for patent search
-
-        Concept Matrix:
-        - Problem/Purpose: {problem_purpose}
-        - Object/System: {object_system}
-        - Action/Method: {action_method}
-        - Key Technical Feature: {key_technical_feature}
-        - Environment/Field: {environment_field}
-        - Advantage/Result: {advantage_result}
-
-        Return in JSON format with each component as an array of keywords:
-        {{
-            "problem_purpose": ["keyword1", "keyword2"],
-            "object_system": ["keyword1"],
-            "action_method": ["keyword1", "keyword2"],
-            "key_technical_feature": ["keyword1", "keyword2", "keyword3"],
-            "environment_field": ["keyword1"],
-            "advantage_result": ["keyword1", "keyword2"]
-        }}
+        """Legacy method for backward compatibility"""
+        prompt, _ = ExtractionPrompts.get_phase2_prompt_and_parser()
+        return prompt
+    
+    @staticmethod
+    def get_phase3_auto_prompt_and_parser():
+        """Phase 3: Automatic refinement prompt with parser"""
+        parser = PydanticOutputParser(pydantic_object=SeedKeywordsOutput)
         
-        Example:
-        {{
-            "problem_purpose": ["water conservation", "irrigation optimization"],
-            "object_system": ["smart irrigation system", "automated controller"],
-            "action_method": ["automatic scheduling", "moisture monitoring"],
-            "key_technical_feature": ["soil moisture sensor", "weather data", "IoT integration"],
-            "environment_field": ["agriculture", "precision farming"],
-            "advantage_result": ["water savings", "crop optimization"]
-        }}
-        """)
+        prompt = PromptTemplate(
+            template="""
+            Automatically refine and enhance the seed keywords based on the concept matrix and initial extraction.
+            
+            Original Concept Matrix:
+            {concept_matrix}
+            
+            Current Keywords:
+            {current_keywords}
+
+            Please improve the keywords by:
+            1. Ensuring technical specificity and distinctiveness
+            2. Removing overly general terms
+            3. Adding important technical terms that may have been missed
+            4. Optimizing for patent search effectiveness
+            5. Ensuring good coverage of all concept areas
+            6. Maintaining 1-3 keywords per category
+
+            Focus on:
+            - Technical terminology that would appear in patent documents
+            - Specific component names, processes, and methods
+            - Industry-standard terminology
+            - Terms that distinguish this invention from others
+
+            {format_instructions}
+            """,
+            input_variables=["concept_matrix", "current_keywords"],
+            partial_variables={"format_instructions": parser.get_format_instructions()}
+        )
+        
+        return prompt, parser
     
     @staticmethod
     def get_phase3_auto_prompt() -> PromptTemplate:
-        """Phase 3: Automatic refinement prompt"""
-        return PromptTemplate.from_template("""
-        Automatically refine and enhance the seed keywords based on the concept matrix and initial extraction.
-        
-        Original Concept Matrix:
-        {concept_matrix}
-        
-        Current Keywords:
-        {current_keywords}
-
-        Please improve the keywords by:
-        1. Ensuring technical specificity and distinctiveness
-        2. Removing overly general terms
-        3. Adding important technical terms that may have been missed
-        4. Optimizing for patent search effectiveness
-        5. Ensuring good coverage of all concept areas
-        6. Maintaining 1-3 keywords per category
-
-        Focus on:
-        - Technical terminology that would appear in patent documents
-        - Specific component names, processes, and methods
-        - Industry-standard terminology
-        - Terms that distinguish this invention from others
-
-        Return the refined keywords in the same JSON format:
-        {{
-            "problem_purpose": ["refined_keyword1", "refined_keyword2"],
-            "object_system": ["refined_keyword1"],
-            "action_method": ["refined_keyword1", "refined_keyword2"],
-            "key_technical_feature": ["refined_keyword1", "refined_keyword2", "refined_keyword3"],
-            "environment_field": ["refined_keyword1"],
-            "advantage_result": ["refined_keyword1", "refined_keyword2"]
-        }}
-        """)
+        """Legacy method for backward compatibility"""
+        prompt, _ = ExtractionPrompts.get_phase3_auto_prompt_and_parser()
+        return prompt
     
     @staticmethod
-    def get_phase3_prompt() -> PromptTemplate:
-        """Phase 3: Manual refinement prompt (deprecated - kept for compatibility)"""
-        return PromptTemplate.from_template("""
-        Improve the seed keywords based on user feedback:
+    def get_phase3_prompt_and_parser():
+        """Phase 3: Manual refinement prompt with parser (for re-runs)"""
+        parser = PydanticOutputParser(pydantic_object=SeedKeywordsOutput)
+        
+        prompt = PromptTemplate(
+            template="""
+            Improve the seed keywords based on user feedback:
 
-        Current keywords:
-        {current_keywords}
+            Current keywords:
+            {current_keywords}
 
-        User feedback: {feedback}
+            User feedback: {feedback}
 
-        Please refine the keywords to:
-        1. Ensure sufficient distinctiveness and technical specificity
-        2. Avoid overly general terms
-        3. Add important missing technical concepts mentioned in feedback
-        4. Optimize for patent search effectiveness
-        5. Maintain 1-3 keywords per category
+            Please refine the keywords to:
+            1. Ensure sufficient distinctiveness and technical specificity
+            2. Avoid overly general terms
+            3. Add important missing technical concepts mentioned in feedback
+            4. Optimize for patent search effectiveness
+            5. Maintain 1-3 keywords per category
 
-        Return in the same JSON format as before with improved keywords.
-        """)
+            {format_instructions}
+            """,
+            input_variables=["current_keywords", "feedback"],
+            partial_variables={"format_instructions": parser.get_format_instructions()}
+        )
+        
+        return prompt, parser
     
     @staticmethod
     def get_validation_messages() -> dict:
@@ -201,6 +220,44 @@ Choose your action:
             4. Alternative terms to consider
             """
         }
+    
+    @staticmethod
+    def get_concept_matrix_parser():
+        """Get parser for concept matrix output"""
+        from langchain.output_parsers import PydanticOutputParser
+        return PydanticOutputParser(pydantic_object=ConceptMatrixOutput)
+    
+    @staticmethod
+    def get_seed_keywords_parser():
+        """Get parser for seed keywords output"""
+        from langchain.output_parsers import PydanticOutputParser
+        return PydanticOutputParser(pydantic_object=SeedKeywordsOutput)
+    
+    @staticmethod
+    def create_output_fixing_parser(base_parser, llm):
+        """Create an output fixing parser that can handle malformed responses"""
+        from langchain.output_parsers import OutputFixingParser
+        return OutputFixingParser.from_llm(parser=base_parser, llm=llm)
+
+# Output Models for Structured Parsing
+class ConceptMatrixOutput(BaseModel):
+    """Output model for Phase 1 concept extraction"""
+    problem_purpose: str = Field(description="What problem does this solve or what is the main objective?")
+    object_system: str = Field(description="What is the main object, device, or system being described?")
+    action_method: str = Field(description="What actions, processes, or methods are performed?")
+    key_technical_feature: str = Field(description="What are the core technical features or structural elements?")
+    environment_field: str = Field(description="What is the application domain or operating environment?")
+    advantage_result: str = Field(description="What benefits or results are achieved?")
+
+
+class SeedKeywordsOutput(BaseModel):
+    """Output model for Phase 2 and 3 keyword extraction"""
+    problem_purpose: List[str] = Field(description="Keywords for problem/purpose")
+    object_system: List[str] = Field(description="Keywords for object/system")
+    action_method: List[str] = Field(description="Keywords for action/method")
+    key_technical_feature: List[str] = Field(description="Keywords for key technical features")
+    environment_field: List[str] = Field(description="Keywords for environment/field")
+    advantage_result: List[str] = Field(description="Keywords for advantage/result")
 
 if __name__ == "__main__":
     # Test prompts functionality
