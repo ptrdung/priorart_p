@@ -251,16 +251,16 @@ Analyze the keywords extracted from each component of the concept matrix and pro
             "divider": "\n" + "-"*60,
             "action_options": """
 Choose your action:
-1. [A]pprove - Accept the results as final
-2. [E]dit - Manually edit the keywords
-3. [R]erun - Run the extraction process again with feedback
+1. [A]pprove - Accept the results and export to JSON
+2. [R]eject - Reject and restart from step 1
+3. [E]dit - Manually edit the keywords and finish
             """,
-            "action_prompt": "Your choice (1/2/3 or a/e/r): ",
-            "rerun_feedback_prompt": "Feedback for re-run (what should be improved): ",
-            "invalid_action": "Please enter 1, 2, 3 or a, e, r",
+            "action_prompt": "Your choice (1/2/3 or a/r/e): ",
+            "reject_feedback_prompt": "Feedback for restart (what should be improved): ",
+            "invalid_action": "Please enter 1, 2, 3 or a, r, e",
             "approved": "Approved",
             "edited": "Manually edited",
-            "rerun_requested": "Re-run requested"
+            "rejected": "Rejected - restarting"
         }
     
     @staticmethod

@@ -277,7 +277,7 @@ class CoreConceptExtractor:
             print(f"    - {issue}")
         
         print(msgs["divider"])
-        print(msgs["step4_action_options"])
+        print(msgs["action_options"])
         
         # Get user action
         while True:
