@@ -9,8 +9,9 @@ import json
 def demo_with_sample_patents():
     """Demo with different patent samples"""
     
-    extractor = CoreConceptExtractor(model_name="llama3")
-    
+    # Use simple mode without checkpointer to avoid thread_id requirements
+    extractor = CoreConceptExtractor(model_name="qwen2.5:0.5b-instruct", use_checkpointer=False)
+
     samples = [
         {
             "title": "Smart Irrigation System",
@@ -46,8 +47,10 @@ def demo_with_sample_patents():
 def interactive_mode():
     """Interactive mode for user input"""
     
-    extractor = CoreConceptExtractor(model_name="llama3")
-    
+    # Use simple mode without checkpointer to avoid thread_id requirements
+    # extractor = CoreConceptExtractor(model_name="llama3", use_checkpointer=False)
+    extractor = CoreConceptExtractor(model_name="qwen2.5:0.5b-instruct", use_checkpointer=False)
+
     print("🚀 WELCOME TO PATENT SEED KEYWORD EXTRACTION SYSTEM")
     print("="*70)
     print("✨ New Workflow: Automatic refinement with final human evaluation")
