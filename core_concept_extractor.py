@@ -69,7 +69,7 @@ class ExtractionState(TypedDict):
 class CoreConceptExtractor:
     """Patent seed keyword extraction system"""
     
-    def __init__(self, model_name: str = "llama3", use_checkpointer: bool = False):
+    def __init__(self, model_name: str = "qwen2.5:0.5b-instruct", use_checkpointer: bool = False):
         self.llm = Ollama(model=model_name, temperature=0.3)
         self.prompts = ExtractionPrompts()
         self.messages = ExtractionPrompts.get_phase_completion_messages()
@@ -189,9 +189,37 @@ class CoreConceptExtractor:
         """Step 2: Generate main keywords for each field from summary"""
         concept_matrix = state["concept_matrix"]
         
-        prompt, parser = self.prompts.get_phase2_prompt_and_parser()
+        # Check if this is a regeneration based on reflection feedback
+        reflection_evaluation = state.get("reflection_evaluation")
+        is_regeneration = reflection_evaluation is not None and state.get("reflection_iterations", 0) > 0
         
-        response = self.llm.invoke(prompt.format(**concept_matrix.dict()))
+        if is_regeneration and reflection_evaluation:
+            # Use reflection feedback to improve keyword generation
+            prompt, parser = self.prompts.get_phase3_prompt_and_parser()
+            
+            # Create feedback string from reflection evaluation
+            feedback = f"""
+            Issues found: {'; '.join(reflection_evaluation.issues_found)}
+            Recommendations: {'; '.join(reflection_evaluation.recommendations)}
+            
+            Please regenerate keywords addressing these specific issues.
+            """
+            
+            current_keywords = state["seed_keywords"].dict() if state["seed_keywords"] else {}
+            
+            response = self.llm.invoke(prompt.format(
+                current_keywords=current_keywords,
+                feedback=feedback
+            ))
+            
+            state["messages"].append(f"Step 2 (iteration {state.get('reflection_iterations', 0)}): Regenerating keywords based on reflection feedback")
+        else:
+            # Initial keyword generation
+            prompt, parser = self.prompts.get_phase2_prompt_and_parser()
+            
+            response = self.llm.invoke(prompt.format(**concept_matrix.dict()))
+            
+            state["messages"].append("Step 2 completed: Main keywords generated for each field")
         
         try:
             # Use LangChain parser
@@ -203,7 +231,6 @@ class CoreConceptExtractor:
         
         state["seed_keywords"] = seed_keywords
         state["current_phase"] = "step2_completed"
-        state["messages"].append("Step 2 completed: Main keywords generated for each field")
         
         return state
 
@@ -540,6 +567,10 @@ class CoreConceptExtractor:
             # Limit reflection iterations to avoid infinite loops
             if state.get("reflection_iterations", 0) < 3:
                 return "regenerate"
+            else:
+                # If we've hit max iterations, proceed to human evaluation
+                state["messages"].append("⚠️ Maximum reflection iterations reached - proceeding to human evaluation")
+                return "proceed"
         return "proceed"
     
     def _get_human_action(self, state: ExtractionState) -> str:
@@ -561,7 +592,7 @@ class CoreConceptExtractor:
 
 if __name__ == "__main__":
     # Example usage with structured parsers (using simple mode)
-    extractor = CoreConceptExtractor(model_name="llama3", use_checkpointer=False)
+    extractor = CoreConceptExtractor(model_name="qwen2.5:0.5b-instruct", use_checkpointer=False)
     
     sample_text = """
     A smart irrigation system that uses soil moisture sensors and weather data 

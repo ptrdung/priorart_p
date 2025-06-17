@@ -1,12 +1,12 @@
 # Patent Seed Keyword Extraction System
 
-A system implementing a 3-phase methodology to extract seed keywords from technical/patent documents using LangChain, LangGraph and Ollama.
+A system implementing a 4-step methodology with reflection and human-in-the-loop to extract seed keywords from technical/patent documents using LangChain, LangGraph and Ollama.
 
 ## 🏗️ Architecture
 
 - **LangChain**: LLM integration and prompt processing
-- **LangGraph**: Workflow with human-in-the-loop
-- **Ollama**: Local LLM (Llama3)
+- **LangGraph**: Workflow with reflection and human-in-the-loop
+- **Ollama**: Local LLM (Qwen2.5:0.5b-instruct)
 - **Pydantic**: Data validation and structure
 
 ## 📦 Installation
@@ -18,22 +18,22 @@ pip install -r requirements.txt
 # Install Ollama (if not already installed)
 # https://ollama.ai/
 
-# Pull Llama3 model
-ollama pull llama3
+# Pull Qwen2.5 model
+ollama pull qwen2.5:0.5b-instruct
 ```
 
 ## 🚀 Usage
 
-### 1. Interactive mode
+### 1. Interactive mode with new workflow
 
 ```bash
-python demo.py
+python demo_new_workflow.py
 ```
 
 ### 2. Run demo with sample data
 
 ```bash
-python demo.py demo
+python demo.py
 ```
 
 ### 3. Use programmatically
@@ -41,51 +41,73 @@ python demo.py demo
 ```python
 from core_concept_extractor import CoreConceptExtractor
 
-extractor = CoreConceptExtractor(model_name="llama3")
+extractor = CoreConceptExtractor(model_name="qwen2.5:0.5b-instruct")
 results = extractor.extract_keywords("Your patent description...")
 ```
 
-## 📋 3-Phase Process
+## 📋 4-Step Process with Reflection
 
-### Phase 1: Abstraction & Concept Definition
+### Step 1: Document Summary by Fields
 
-- Analyze input document
-- Create Concept Matrix with 6 components
+- Analyze input document  
+- Create Concept Matrix with 6 components:
+  - Problem/Purpose
+  - Object/System
+  - Action/Method
+  - Key Technical Feature
+  - Environment/Field
+  - Advantage/Result
 
-### Phase 2: Initial Seed Keyword Extraction
+### Step 2: Main Keyword Generation
 
-- From Concept Matrix → 1-3 keywords/component
-- Prioritize technical nouns and main verbs
+- From Concept Matrix → generate main keywords for each field
+- Focus on technical specificity and search effectiveness
+- Prioritize domain-specific terms and technical nouns
 
-### Phase 3: Automatic Refinement & Quality Enhancement
+### Step 3: Reflection Evaluation ⭐ NEW
 
-- Automatically improve keyword quality and specificity
-- Optimize for patent search effectiveness
-- Ensure technical precision and coverage
+- **AI Self-Assessment**: Automatically evaluate keyword quality
+- **Quality Metrics**: Technical specificity, distinctiveness, completeness
+- **Smart Regeneration**: Auto-regenerate if quality is poor
+- **Iteration Limit**: Maximum 3 reflection cycles to avoid infinite loops
+- **Assessment Criteria**:
+  - Technical specificity level
+  - Search discriminative power
+  - Coverage completeness
+  - Redundancy detection
+  - Generic term filtering
 
-### Final Human Evaluation
+### Step 4: Human in the Loop Evaluation
 
-- Review complete results only at the end
+- Review AI-approved keywords with reflection assessment
 - Three options available:
-  1. **Approve**: Accept results as final
-  2. **Manual Edit**: Directly modify keywords
-  3. **Re-run**: Restart process with feedback
+  1. **✅ Approve**: Export to JSON file
+  2. **❌ Reject**: Restart from beginning  
+  3. **✏️ Edit**: Manually modify keywords and finish
 
 ## 🆕 Workflow Improvements
 
-### Enhanced User Experience
-- **Streamlined Process**: Phases 1-3 run automatically without interruption
-- **Final Review**: Human evaluation only at the end with complete results
-- **Flexible Actions**: Three clear options for final results handling
-- **Direct Editing**: Modify keywords immediately without going through refinement cycles
-- **Smart Re-runs**: Restart with specific feedback for targeted improvements
+### Enhanced Quality Control
+
+- **AI Reflection**: Automatic quality assessment before human review
+- **Intelligent Regeneration**: Keywords regenerated automatically if quality is poor
+- **Reflection Feedback**: Uses specific issues and recommendations for improvement
+- **Iteration Control**: Prevents infinite reflection loops with maximum iteration limit
+
+### Streamlined Process
+
+- **Step 1-3**: Run automatically without interruption
+- **Final Review**: Human evaluation only after AI approval
+- **Better Context**: Users see both final keywords AND AI assessment
+- **Targeted Feedback**: Rejection provides feedback for full restart
 
 ### Benefits
-- ⚡ **Faster Processing**: No intermediate stops for validation
-- 🎯 **Better Focus**: Evaluate complete results rather than partial outputs  
-- ✏️ **Direct Control**: Manual editing capability for precise adjustments
-- 🔄 **Efficient Iterations**: Targeted re-runs with specific feedback
-- 📈 **Higher Quality**: Automatic refinement ensures consistent baseline quality
+
+- 🤖 **AI Quality Gate**: Automatic filtering of poor-quality keywords
+- 🎯 **Higher Baseline**: Human review starts with AI-approved keywords  
+- 📊 **Transparency**: See AI reasoning and assessment scores
+- 🔄 **Smart Iterations**: Reflection uses specific feedback for improvements
+- ⚡ **Efficiency**: Less human intervention for obviously poor results
 
 ## 📁 File Structure
 

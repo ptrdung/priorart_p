@@ -1,20 +1,49 @@
 """
-Prompt templates for patent seed keyword extraction system
+Simplified prompt templates for patent seed keyword extraction system
 """
 
 from langchain.prompts import PromptTemplate
-from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
-from langchain_core.output_parsers import JsonOutputParser
+from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from typing import List, Dict
 
 
+# Simplified Data Models
+class ConceptMatrixOutput(BaseModel):
+    """Output model for Phase 1 concept extraction"""
+    problem_purpose: str = Field(description="Problem/Purpose")
+    object_system: str = Field(description="Object/System")
+    action_method: str = Field(description="Action/Method")
+    key_technical_feature: str = Field(description="Key Technical Feature")
+    environment_field: str = Field(description="Environment/Field")
+    advantage_result: str = Field(description="Advantage/Result")
+
+
+class ReflectionEvaluationOutput(BaseModel):
+    """Output model for reflection evaluation of keywords"""
+    overall_quality: str = Field(description="Overall quality assessment: 'good' or 'poor'")
+    keyword_scores: Dict[str, float] = Field(description="Score for each category (0-1)")
+    issues_found: List[str] = Field(description="List of specific issues identified")
+    recommendations: List[str] = Field(description="Recommendations for improvement")
+    should_regenerate: bool = Field(description="Whether keywords should be regenerated")
+
+
+class SeedKeywordsOutput(BaseModel):
+    """Output model for Phase 2 and 3 keyword extraction"""
+    problem_purpose_keywords: List[str] = Field(description="Problem/Purpose keywords")
+    object_system_keywords: List[str] = Field(description="Object/System keywords")
+    action_method_keywords: List[str] = Field(description="Action/Method keywords")
+    key_technical_feature_keywords: List[str] = Field(description="Key Technical Feature keywords")
+    environment_field_keywords: List[str] = Field(description="Environment/Field keywords")
+    advantage_result_keywords: List[str] = Field(description="Advantage/Result keywords")
+
+
 class ExtractionPrompts:
-    """Collection of prompt templates for the 3-phase extraction process"""
+    """Simplified collection of prompt templates"""
     
     @staticmethod
     def get_phase1_prompt_and_parser():
-        """Phase 1: Concept Matrix extraction prompt with parser"""
+        """Phase 1: Concept Matrix extraction"""
         parser = PydanticOutputParser(pydantic_object=ConceptMatrixOutput)
         
         prompt = PromptTemplate(
@@ -46,14 +75,8 @@ For each component below, provide a concise, factual summary. If a component is 
         return prompt, parser
     
     @staticmethod
-    def get_phase1_prompt() -> PromptTemplate:
-        """Legacy method for backward compatibility"""
-        prompt, _ = ExtractionPrompts.get_phase1_prompt_and_parser()
-        return prompt
-    
-    @staticmethod
     def get_phase2_prompt_and_parser():
-        """Phase 2: Seed keyword extraction prompt with parser"""
+        """Phase 2: Seed keyword extraction"""
         parser = PydanticOutputParser(pydantic_object=SeedKeywordsOutput)
         
         prompt = PromptTemplate(
@@ -91,64 +114,8 @@ From the following Concept Matrix, extract distinctive, high-impact technical ke
         return prompt, parser
     
     @staticmethod
-    def get_phase2_prompt() -> PromptTemplate:
-        """Legacy method for backward compatibility"""
-        prompt, _ = ExtractionPrompts.get_phase2_prompt_and_parser()
-        return prompt
-    
-    @staticmethod
-    def get_phase3_auto_prompt_and_parser():
-        """Phase 3: Automatic refinement prompt with parser"""
-        parser = PydanticOutputParser(pydantic_object=SeedKeywordsOutput)
-        
-        prompt = PromptTemplate(
-            template="""You are a technical keyword optimization specialist for patent search and prior art analysis.
-
-**Task:**  
-Automatically refine and enhance the seed keywords based on the provided concept matrix and initial extraction.
-
-**Instructions:**  
-- Review the **Original Concept Matrix** and the **Current Keywords**.
-- Perform the following steps in order:
-  1. **Identify and add important missing technical terms** from the Concept Matrix that are not present in the Current Keywords.
-  2. **Remove overly general, non-technical, or redundant terms.**
-  3. Ensure each keyword is **technically specific, distinctive, and valuable for patent searches** — prioritize component names, algorithm/process names, sensor types, and industry-standard terminology.
-  4. **Avoid duplicate or synonymous terms across categories.** If a term is conceptually similar to an existing keyword, omit it.
-  5. Ensure **comprehensive coverage across all Concept Matrix components** by assigning **1-3 optimized keywords per category.**
-  6. Optimize the final list for **patent search discriminative power** — select terms most likely to improve prior art search precision.
-
-**Focus on:**  
-- Highly technical terminology typically used in patent claims and prior art documents  
-- Specific component names, processing methods, and unique technical features  
-- Standardized industry terminology relevant to the domain  
-- Terms that clearly distinguish this invention from related technologies
-
-**Original Concept Matrix:**  
-{concept_matrix}
-
-**Current Keywords:**  
-{current_keywords}
-
-**Output:**  
-Provide the final improved keyword list in the following format:
-
-{format_instructions}
-""",
-            input_variables=["concept_matrix", "current_keywords"],
-            partial_variables={"format_instructions": parser.get_format_instructions()}
-        )
-        
-        return prompt, parser
-    
-    @staticmethod
-    def get_phase3_auto_prompt() -> PromptTemplate:
-        """Legacy method for backward compatibility"""
-        prompt, _ = ExtractionPrompts.get_phase3_auto_prompt_and_parser()
-        return prompt
-    
-    @staticmethod
     def get_phase3_prompt_and_parser():
-        """Phase 3: Manual refinement prompt with parser (for re-runs)"""
+        """Phase 3: Keyword refinement with feedback"""
         parser = PydanticOutputParser(pydantic_object=SeedKeywordsOutput)
         
         prompt = PromptTemplate(
@@ -185,236 +152,142 @@ Return the final list of improved keywords in the following format:
     
     @staticmethod
     def get_reflection_prompt_and_parser():
-        """Reflection step: Evaluate generated keywords quality"""
-        parser = PydanticOutputParser(pydantic_object=ReflectionEvaluation)
+        """Reflection: Evaluate the quality of extracted keywords"""
+        parser = PydanticOutputParser(pydantic_object=ReflectionEvaluationOutput)
         
         prompt = PromptTemplate(
-            template="""You are an expert patent search keyword quality evaluator.
+            template="""You are an expert patent keyword quality assessor with deep expertise in evaluating keyword sets for patent search effectiveness.
 
 **Task:**  
-Evaluate the quality of the generated seed keywords for patent search effectiveness.
+Evaluate the quality of the following extracted keywords based on the original concept matrix. Provide a thorough assessment to determine if the keywords are suitable for patent search or need regeneration.
+
+**Original Concept Matrix:**  
+- Problem/Purpose: {problem_purpose}  
+- Object/System: {object_system}  
+- Action/Method: {action_method}  
+- Key Technical Feature: {key_technical_feature}  
+- Environment/Field: {environment_field}  
+- Advantage/Result: {advantage_result}  
+
+**Current Keywords:**  
+- Problem/Purpose Keywords: {problem_purpose_keywords}  
+- Object/System Keywords: {object_system_keywords}  
+- Action/Method Keywords: {action_method_keywords}  
+- Key Technical Feature Keywords: {key_technical_feature_keywords}  
+- Environment/Field Keywords: {environment_field_keywords}  
+- Advantage/Result Keywords: {advantage_result_keywords}  
+
+**Evaluation Criteria:**  
+1. **Technical Specificity**: Are keywords technically specific and domain-relevant?
+2. **Distinctiveness**: Do keywords have high discriminative power for patent search?
+3. **Completeness**: Do keywords adequately cover the technical concepts?
+4. **Redundancy**: Are there duplicate or overly similar terms?
+5. **Generic Terms**: Are there too many generic/common words?
+6. **Search Effectiveness**: Would these keywords help find relevant prior art?
 
 **Instructions:**  
-Analyze the keywords extracted from each component of the concept matrix and provide:
-1. An overall quality assessment: 'good' or 'poor'
-2. Individual scores (0-1) for each keyword category
-3. Specific issues found (if any)
-4. Recommendations for improvement
-5. Whether keywords should be regenerated
+- Provide an **overall quality assessment** as either "good" or "poor"
+- Score each keyword category from 0.0 to 1.0 (0=poor, 1=excellent)
+- List specific **issues found** (e.g., "Too generic terms in object_system", "Missing key technical concepts")
+- Provide **actionable recommendations** for improvement
+- Set **should_regenerate** to true if keywords need to be regenerated, false if they are acceptable
 
-**Evaluation Criteria:**
-- **Technical Specificity**: Are keywords technically precise and domain-specific?
-- **Search Discriminative Power**: Will these keywords effectively narrow down patent search results?
-- **Coverage**: Do keywords adequately represent the technical concept in each category?
-- **Distinctiveness**: Are keywords unique and not overly generic?
-- **Completeness**: Are any important technical terms missing?
-
-**Concept Matrix:**
-- Problem/Purpose: {problem_purpose}
-- Object/System: {object_system}  
-- Action/Method: {action_method}
-- Key Technical Feature: {key_technical_feature}
-- Environment/Field: {environment_field}
-- Advantage/Result: {advantage_result}
-
-**Generated Keywords:**
-- Problem/Purpose Keywords: {problem_purpose_keywords}
-- Object/System Keywords: {object_system_keywords}
-- Action/Method Keywords: {action_method_keywords}
-- Key Technical Feature Keywords: {key_technical_feature_keywords}
-- Environment/Field Keywords: {environment_field_keywords}
-- Advantage/Result Keywords: {advantage_result_keywords}
-
-**Iteration:** {iteration}
+This is iteration #{iteration} of the reflection process.
 
 {format_instructions}
 """,
             input_variables=["problem_purpose", "object_system", "action_method", 
                            "key_technical_feature", "environment_field", "advantage_result",
-                           "problem_purpose_keywords", "object_system_keywords", 
-                           "action_method_keywords", "key_technical_feature_keywords",
-                           "environment_field_keywords", "advantage_result_keywords", "iteration"],
+                           "problem_purpose_keywords", "object_system_keywords", "action_method_keywords",
+                           "key_technical_feature_keywords", "environment_field_keywords", 
+                           "advantage_result_keywords", "iteration"],
             partial_variables={"format_instructions": parser.get_format_instructions()}
         )
         
         return prompt, parser
 
+    # Legacy methods for backward compatibility
     @staticmethod
-    def get_validation_messages() -> dict:
-        """User interface messages for validation phase"""
+    def get_phase1_prompt():
+        prompt, _ = ExtractionPrompts.get_phase1_prompt_and_parser()
+        return prompt
+    
+    @staticmethod
+    def get_phase2_prompt():
+        prompt, _ = ExtractionPrompts.get_phase2_prompt_and_parser()
+        return prompt
+    
+    @staticmethod
+    def get_phase3_prompt():
+        prompt, _ = ExtractionPrompts.get_phase3_prompt_and_parser()
+        return prompt
+    
+    @staticmethod
+    def get_reflection_prompt():
+        prompt, _ = ExtractionPrompts.get_reflection_prompt_and_parser()
+        return prompt
+    
+    # Simple message collections
+    @staticmethod
+    def get_validation_messages():
         return {
-            "title": "🔍 KEYWORD EXTRACTION RESULTS EVALUATION",
-            "final_evaluation_title": "🎯 FINAL RESULTS EVALUATION",
+            "title": "🔍 KEYWORD EXTRACTION RESULTS",
             "separator": "="*60,
+            "final_evaluation_title": "🎯 FINAL KEYWORD EVALUATION - HUMAN IN THE LOOP",
             "concept_matrix_header": "\n📋 Concept Matrix:",
             "seed_keywords_header": "\n🔑 Final Seed Keywords:",
             "divider": "\n" + "-"*60,
-            "action_options": """
-Choose your action:
-1. [A]pprove - Accept the results and export to JSON
-2. [R]eject - Reject and restart from step 1
-3. [E]dit - Manually edit the keywords and finish
-            """,
-            "action_prompt": "Your choice (1/2/3 or a/r/e): ",
-            "reject_feedback_prompt": "Feedback for restart (what should be improved): ",
-            "invalid_action": "Please enter 1, 2, 3 or a, r, e",
-            "approved": "Approved",
-            "edited": "Manually edited",
-            "rejected": "Rejected - restarting"
+            "action_options": "\n📝 Choose your action:\n  1. ✅ Approve - Export to JSON file\n  2. ❌ Reject - Restart from beginning\n  3. ✏️  Edit - Manually modify keywords",
+            "action_prompt": "\nEnter your choice [1/2/3 or approve/reject/edit]: ",
+            "reject_feedback_prompt": "\nOptional: Provide feedback for improvement: ",
+            "invalid_action": "❌ Invalid choice. Please enter 1, 2, 3, approve, reject, or edit.",
+            "approved": "✅ Keywords approved by user",
+            "edited": "✏️ Keywords manually edited by user", 
+            "rejected": "❌ Keywords rejected - restarting extraction"
         }
     
     @staticmethod
-    def get_phase_completion_messages() -> dict:
-        """Messages for phase completion"""
+    def get_phase_completion_messages():
         return {
             "phase1_completed": "Phase 1 completed: Concept Matrix extracted",
-            "phase2_completed": "Phase 2 completed: Initial seed keywords extracted", 
-            "phase3_completed": "Phase 3 completed: Keywords automatically refined",
-            "extraction_completed": "✅ Patent seed keyword extraction completed",
-            "user_evaluation": "User evaluation: {status}",
-            "manual_edit_completed": "Keywords manually edited by user",
-            "rerun_initiated": "Re-running extraction process with user feedback"
+            "phase2_completed": "Phase 2 completed: Seed keywords extracted", 
+            "phase3_completed": "Phase 3 completed: Keywords refined",
+            "extraction_completed": "✅ Patent seed keyword extraction completed"
         }
     
-    @staticmethod
-    def get_analysis_prompts() -> dict:
-        """Additional prompts for keyword analysis"""
-        return {
-            "quality_analysis": """
-            Analyze the quality of these patent search keywords:
-            {keywords}
-            
-            Evaluate based on:
-            1. Technical specificity
-            2. Search effectiveness
-            3. Coverage of key concepts
-            4. Distinctiveness
-            
-            Provide recommendations for improvement.
-            """,
-            
-            "search_strategy": """
-            Create a patent search strategy using these keywords:
-            {keywords}
-            
-            Provide:
-            1. Primary search terms (most important)
-            2. Secondary search terms (supporting)
-            3. Boolean query structure
-            4. Alternative terms to consider
-            """
-        }
-    
+    # Simplified parser methods
     @staticmethod
     def get_concept_matrix_parser():
-        """Get parser for concept matrix output"""
-        from langchain.output_parsers import PydanticOutputParser
         return PydanticOutputParser(pydantic_object=ConceptMatrixOutput)
     
     @staticmethod
     def get_seed_keywords_parser():
-        """Get parser for seed keywords output"""
-        from langchain.output_parsers import PydanticOutputParser
         return PydanticOutputParser(pydantic_object=SeedKeywordsOutput)
     
     @staticmethod
-    def create_output_fixing_parser(base_parser, llm):
-        """Create an output fixing parser that can handle malformed responses"""
-        from langchain.output_parsers import OutputFixingParser
-        return OutputFixingParser.from_llm(parser=base_parser, llm=llm)
+    def get_reflection_evaluation_parser():
+        return PydanticOutputParser(pydantic_object=ReflectionEvaluationOutput)
 
-# Output Models for Structured Parsing
-from pydantic import BaseModel, Field
-
-class ConceptMatrixOutput(BaseModel):
-    """Output model for Phase 1 concept extraction from technical documents"""
-    
-    problem_purpose: str = Field(
-        description="What specific problem is addressed or what is the main objective, as explicitly stated in the document?"
-    )
-    object_system: str = Field(
-        description="What is the main object, device, system, or process being described?"
-    )
-    action_method: str = Field(
-        description="What actions, processes, or methods are applied or proposed in the document?"
-    )
-    key_technical_feature: str = Field(
-        description="What are the essential technical features, structures, or configurations that enable the system or method?"
-    )
-    environment_field: str = Field(
-        description="What is the application domain or operating environment?"
-    )
-    advantage_result: str = Field(
-        description="What specific benefits, improvements, or outcomes are achieved, according to the document?"
-    )
-
-
-class ReflectionEvaluation(BaseModel):
-    """Output model for reflection evaluation of keywords"""
-    overall_quality: str = Field(
-        description="Overall quality assessment: 'good' or 'poor'"
-    )
-    keyword_scores: Dict[str, float] = Field(
-        description="Score for each category (0-1)"
-    )
-    issues_found: List[str] = Field(
-        description="List of specific issues identified"
-    )
-    recommendations: List[str] = Field(
-        description="Recommendations for improvement"
-    )
-    should_regenerate: bool = Field(
-        description="Whether keywords should be regenerated"
-    )
-
-
-class SeedKeywordsOutput(BaseModel):
-    """Output model for Phase 2 and 3 keyword extraction"""
-    problem_purpose_keywords: List[str] = Field(
-        description="Distinctive technical keywords extracted from the problem or purpose component."
-    )
-    object_system_keywords: List[str] = Field(
-        description="Distinctive technical keywords extracted from the object or system component."
-    )
-    action_method_keywords: List[str] = Field(
-        description="Distinctive technical keywords extracted from the action or method component."
-    )
-    key_technical_feature_keywords: List[str] = Field(
-        description="Distinctive technical keywords extracted from the key technical feature or structure component."
-    )
-    environment_field_keywords: List[str] = Field(
-        description="Distinctive technical keywords extracted from the environment or application field component."
-    )
-    advantage_result_keywords: List[str] = Field(
-        description="Distinctive technical keywords extracted from the advantage or result component."
-    )
 
 if __name__ == "__main__":
-    # Test prompts functionality
-    print("🧪 Testing prompt templates...")
+    print("🧪 Testing simplified prompt templates...")
     
-    # Test Phase 1 prompt
-    phase1_prompt = ExtractionPrompts.get_phase1_prompt()
-    print("\n📋 Phase 1 Prompt Template:")
-    print("✅ Created successfully")
+    # Test prompts
+    phase1_prompt, phase1_parser = ExtractionPrompts.get_phase1_prompt_and_parser()
+    phase2_prompt, phase2_parser = ExtractionPrompts.get_phase2_prompt_and_parser()
+    phase3_prompt, phase3_parser = ExtractionPrompts.get_phase3_prompt_and_parser()
+    reflection_prompt, reflection_parser = ExtractionPrompts.get_reflection_prompt_and_parser()
     
-    # Test Phase 2 prompt
-    phase2_prompt = ExtractionPrompts.get_phase2_prompt()
-    print("\n🔑 Phase 2 Prompt Template:")
-    print("✅ Created successfully")
-    
-    # Test Phase 3 prompt
-    phase3_prompt = ExtractionPrompts.get_phase3_prompt()
-    print("\n🔧 Phase 3 Prompt Template:")
-    print("✅ Created successfully")
+    print("✅ Phase 1 prompt and parser created")
+    print("✅ Phase 2 prompt and parser created")
+    print("✅ Phase 3 prompt and parser created")
+    print("✅ Reflection prompt and parser created")
     
     # Test messages
     validation_msgs = ExtractionPrompts.get_validation_messages()
     completion_msgs = ExtractionPrompts.get_phase_completion_messages()
-    analysis_prompts = ExtractionPrompts.get_analysis_prompts()
     
-    print(f"\n📢 Validation messages: {len(validation_msgs)} items")
+    print(f"✅ Validation messages: {len(validation_msgs)} items")
     print(f"✅ Completion messages: {len(completion_msgs)} items")
-    print(f"🔍 Analysis prompts: {len(analysis_prompts)} items")
     
-    print("\n🎉 All prompt templates loaded successfully!")
+    print("\n🎉 All simplified prompt templates work correctly!")

@@ -1,0 +1,51 @@
+{
+  "timestamp": "2025-06-17T11:52:10.305545",
+  "concept_matrix": {
+    "problem_purpose": "Identify a system that uses capacitive soil moisture sensors and Wi-Fi for automatic water scheduling.",
+    "object_system": "Water Management System",
+    "action_method": "Automatic Water Scheduling",
+    "key_technical_feature": "Soil Moisture Sensors, Wi-Fi Module, API, Machine Learning, Van Electric, Remote Monitoring",
+    "environment_field": "Nursing and Farming",
+    "advantage_result": "Saves up to 40% water usage, reduces watering time, increases crop yield, remote monitoring through smartphone"
+  },
+  "final_keywords": {
+    "problem_purpose": [
+      "hehe"
+    ],
+    "object_system": [
+      "haha",
+      "eee"
+    ],
+    "action_method": [
+      "đ"
+    ],
+    "key_technical_feature": [
+      "ssss"
+    ],
+    "environment_field": [
+      "extracted_keyword"
+    ],
+    "advantage_result": [
+      "extracted_keyword"
+    ]
+  },
+  "reflection_evaluation": {
+    "overall_quality": "good",
+    "keyword_scores": {},
+    "issues_found": [
+      "Parser failed - using fallback"
+    ],
+    "recommendations": [
+      "Review manually"
+    ],
+    "should_regenerate": false
+  },
+  "processing_messages": [
+    "Step 1 completed: Document summary extracted according to fields",
+    "Step 2 completed: Main keywords generated for each field",
+    "Step 3 completed: Keywords evaluated as good quality, proceeding to human evaluation",
+    "Human evaluation: edit",
+    "Keywords manually edited by user"
+  ],
+  "reflection_iterations": 1
+}
