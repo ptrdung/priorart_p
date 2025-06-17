@@ -54,12 +54,10 @@ class ReflectionEvaluation(BaseModel):
 
 
 class ExtractionState(TypedDict):
-    """State for LangGraph workflow"""
+    """Simplified state for LangGraph workflow"""
     input_text: str
     concept_matrix: Optional[ConceptMatrix]
     seed_keywords: Optional[SeedKeywords]
-    reflection_evaluation: Optional[ReflectionEvaluation]
-    reflection_iterations: int
     validation_feedback: Optional[ValidationFeedback]
     final_keywords: Optional[SeedKeywords]
     current_phase: str
@@ -69,7 +67,7 @@ class ExtractionState(TypedDict):
 class CoreConceptExtractor:
     """Patent seed keyword extraction system"""
     
-    def __init__(self, model_name: str = "qwen2.5:0.5b-instruct", use_checkpointer: bool = False):
+    def __init__(self, model_name: str = "qwen2.5:32b-instruct", use_checkpointer: bool = False):
         self.llm = Ollama(model=model_name, temperature=0.3)
         self.prompts = ExtractionPrompts()
         self.messages = ExtractionPrompts.get_phase_completion_messages()
@@ -79,35 +77,24 @@ class CoreConceptExtractor:
         self.simple_graph = self._build_simple_graph()  # Simpler graph without checkpointer
     
     def _build_graph(self) -> StateGraph:
-        """Build LangGraph workflow"""
+        """Build simplified LangGraph workflow"""
         workflow = StateGraph(ExtractionState)
         
-        # Add nodes for new 4-step process
+        # Add nodes for simplified 3-step process
         workflow.add_node("step1_concept_extraction", self.step1_concept_extraction)
         workflow.add_node("step2_keyword_generation", self.step2_keyword_generation)
-        workflow.add_node("step3_reflection_evaluation", self.step3_reflection_evaluation)
-        workflow.add_node("step4_human_evaluation", self.step4_human_evaluation)
+        workflow.add_node("step3_human_evaluation", self.step3_human_evaluation)
         workflow.add_node("manual_editing", self.manual_editing)
         workflow.add_node("export_results", self.export_results)
         
-        # Define flow
+        # Define simplified flow
         workflow.set_entry_point("step1_concept_extraction")
         workflow.add_edge("step1_concept_extraction", "step2_keyword_generation")
-        workflow.add_edge("step2_keyword_generation", "step3_reflection_evaluation")
-        
-        # Conditional edge from reflection
-        workflow.add_conditional_edges(
-            "step3_reflection_evaluation",
-            self._should_regenerate_keywords,
-            {
-                "regenerate": "step2_keyword_generation",
-                "proceed": "step4_human_evaluation"
-            }
-        )
+        workflow.add_edge("step2_keyword_generation", "step3_human_evaluation")
         
         # Conditional edge from human evaluation
         workflow.add_conditional_edges(
-            "step4_human_evaluation",
+            "step3_human_evaluation",
             self._get_human_action,
             {
                 "approve": "export_results",
@@ -122,35 +109,24 @@ class CoreConceptExtractor:
         return workflow.compile(checkpointer=MemorySaver())
     
     def _build_simple_graph(self) -> StateGraph:
-        """Build simple LangGraph workflow without checkpointer"""
+        """Build simplified LangGraph workflow without checkpointer"""
         workflow = StateGraph(ExtractionState)
         
-        # Add nodes for new 4-step process
+        # Add nodes for simplified 3-step process
         workflow.add_node("step1_concept_extraction", self.step1_concept_extraction)
         workflow.add_node("step2_keyword_generation", self.step2_keyword_generation)
-        workflow.add_node("step3_reflection_evaluation", self.step3_reflection_evaluation)
-        workflow.add_node("step4_human_evaluation", self.step4_human_evaluation)
+        workflow.add_node("step3_human_evaluation", self.step3_human_evaluation)
         workflow.add_node("manual_editing", self.manual_editing)
         workflow.add_node("export_results", self.export_results)
         
-        # Define flow
+        # Define simplified flow
         workflow.set_entry_point("step1_concept_extraction")
         workflow.add_edge("step1_concept_extraction", "step2_keyword_generation")
-        workflow.add_edge("step2_keyword_generation", "step3_reflection_evaluation")
-        
-        # Conditional edge from reflection
-        workflow.add_conditional_edges(
-            "step3_reflection_evaluation",
-            self._should_regenerate_keywords,
-            {
-                "regenerate": "step2_keyword_generation",
-                "proceed": "step4_human_evaluation"
-            }
-        )
+        workflow.add_edge("step2_keyword_generation", "step3_human_evaluation")
         
         # Conditional edge from human evaluation
         workflow.add_conditional_edges(
-            "step4_human_evaluation",
+            "step3_human_evaluation",
             self._get_human_action,
             {
                 "approve": "export_results",
@@ -189,37 +165,9 @@ class CoreConceptExtractor:
         """Step 2: Generate main keywords for each field from summary"""
         concept_matrix = state["concept_matrix"]
         
-        # Check if this is a regeneration based on reflection feedback
-        reflection_evaluation = state.get("reflection_evaluation")
-        is_regeneration = reflection_evaluation is not None and state.get("reflection_iterations", 0) > 0
+        prompt, parser = self.prompts.get_phase2_prompt_and_parser()
         
-        if is_regeneration and reflection_evaluation:
-            # Use reflection feedback to improve keyword generation
-            prompt, parser = self.prompts.get_phase3_prompt_and_parser()
-            
-            # Create feedback string from reflection evaluation
-            feedback = f"""
-            Issues found: {'; '.join(reflection_evaluation.issues_found)}
-            Recommendations: {'; '.join(reflection_evaluation.recommendations)}
-            
-            Please regenerate keywords addressing these specific issues.
-            """
-            
-            current_keywords = state["seed_keywords"].dict() if state["seed_keywords"] else {}
-            
-            response = self.llm.invoke(prompt.format(
-                current_keywords=current_keywords,
-                feedback=feedback
-            ))
-            
-            state["messages"].append(f"Step 2 (iteration {state.get('reflection_iterations', 0)}): Regenerating keywords based on reflection feedback")
-        else:
-            # Initial keyword generation
-            prompt, parser = self.prompts.get_phase2_prompt_and_parser()
-            
-            response = self.llm.invoke(prompt.format(**concept_matrix.dict()))
-            
-            state["messages"].append("Step 2 completed: Main keywords generated for each field")
+        response = self.llm.invoke(prompt.format(**concept_matrix.dict()))
         
         try:
             # Use LangChain parser
@@ -231,53 +179,16 @@ class CoreConceptExtractor:
         
         state["seed_keywords"] = seed_keywords
         state["current_phase"] = "step2_completed"
+        state["messages"].append("Step 2 completed: Main keywords generated for each field")
         
         return state
-
-    def step3_reflection_evaluation(self, state: ExtractionState) -> ExtractionState:
-        """Step 3: Use reflection to evaluate main keywords and create assessment"""
-        current_keywords = state["seed_keywords"]
-        concept_matrix = state["concept_matrix"]
-        
-        prompt, parser = self.prompts.get_reflection_prompt_and_parser()
-        
-        response = self.llm.invoke(prompt.format(
-            problem_purpose=concept_matrix.problem_purpose,
-            object_system=concept_matrix.object_system,
-            action_method=concept_matrix.action_method,
-            key_technical_feature=concept_matrix.key_technical_feature,
-            environment_field=concept_matrix.environment_field,
-            advantage_result=concept_matrix.advantage_result,
-            problem_purpose_keywords=current_keywords.problem_purpose,
-            object_system_keywords=current_keywords.object_system,
-            action_method_keywords=current_keywords.action_method,
-            key_technical_feature_keywords=current_keywords.key_technical_feature,
-            environment_field_keywords=current_keywords.environment_field,
-            advantage_result_keywords=current_keywords.advantage_result,
-            iteration=state.get("reflection_iterations", 0)
-        ))
-        
-        try:
-            # Use LangChain parser
-            reflection_data = parser.parse(response)
-            reflection_evaluation = ReflectionEvaluation(**reflection_data.dict())
-        except Exception as e:
-            print(f"Reflection parser failed: {e}, using fallback")
-            reflection_evaluation = self._parse_reflection_response(response)
-        
-        state["reflection_evaluation"] = reflection_evaluation
-        state["reflection_iterations"] = state.get("reflection_iterations", 0) + 1
-        state["current_phase"] = "step3_completed"
-        
-        if reflection_evaluation.should_regenerate:
-            state["messages"].append(f"Step 3: Reflection found issues - regenerating keywords (iteration {state['reflection_iterations']})")
-        else:
-            state["messages"].append("Step 3 completed: Keywords evaluated as good quality, proceeding to human evaluation")
+        state["current_phase"] = "step2_completed"
+        state["messages"].append("Step 2 completed: Main keywords generated for each field")
         
         return state
     
-    def step4_human_evaluation(self, state: ExtractionState) -> ExtractionState:
-        """Step 4: Human in the loop evaluation with three options"""
+    def step3_human_evaluation(self, state: ExtractionState) -> ExtractionState:
+        """Step 3: Human in the loop evaluation with three options"""
         msgs = self.validation_messages
         
         print("\n" + msgs["separator"])
@@ -287,7 +198,6 @@ class CoreConceptExtractor:
         # Display final results
         concept_matrix = state["concept_matrix"]
         seed_keywords = state["seed_keywords"]
-        reflection_evaluation = state["reflection_evaluation"]
         
         print(msgs["concept_matrix_header"])
         for field, value in concept_matrix.dict().items():
@@ -296,12 +206,6 @@ class CoreConceptExtractor:
         print(msgs["seed_keywords_header"])
         for field, keywords in seed_keywords.dict().items():
             print(f"  • {field.replace('_', ' ').title()}: {keywords}")
-        
-        print(f"\n🤖 AI Reflection Assessment:")
-        print(f"  • Overall Quality: {reflection_evaluation.overall_quality}")
-        print(f"  • Issues Found: {len(reflection_evaluation.issues_found)}")
-        for issue in reflection_evaluation.issues_found[:3]:  # Show top 3 issues
-            print(f"    - {issue}")
         
         print(msgs["divider"])
         print(msgs["action_options"])
@@ -350,9 +254,7 @@ class CoreConceptExtractor:
             "timestamp": datetime.datetime.now().isoformat(),
             "concept_matrix": concept_matrix.dict() if concept_matrix else None,
             "final_keywords": final_keywords.dict() if final_keywords else None,
-            "reflection_evaluation": state["reflection_evaluation"].dict() if state["reflection_evaluation"] else None,
-            "processing_messages": state["messages"],
-            "reflection_iterations": state.get("reflection_iterations", 0)
+            "processing_messages": state["messages"]
         }
         
         # Generate filename
@@ -481,13 +383,11 @@ class CoreConceptExtractor:
             return self._parse_keyword_response(response3)
     
     def extract_keywords(self, input_text: str) -> Dict:
-        """Run the complete 4-step keyword extraction workflow"""
+        """Run the simplified 3-step keyword extraction workflow"""
         initial_state = ExtractionState(
             input_text=input_text,
             concept_matrix=None,
             seed_keywords=None,
-            reflection_evaluation=None,
-            reflection_iterations=0,
             validation_feedback=None,
             final_keywords=None,
             current_phase="initialized",
@@ -505,9 +405,7 @@ class CoreConceptExtractor:
         return {
             "final_keywords": result["final_keywords"].dict() if result["final_keywords"] else None,
             "concept_matrix": result["concept_matrix"].dict() if result["concept_matrix"] else None,
-            "reflection_evaluation": result["reflection_evaluation"].dict() if result["reflection_evaluation"] else None,
             "messages": result["messages"],
-            "reflection_iterations": result.get("reflection_iterations", 0),
             "user_action": result.get("validation_feedback", {}).action if result.get("validation_feedback") else None
         }
     
@@ -560,39 +458,14 @@ class CoreConceptExtractor:
                 print(f"Fixing parser also failed: {e2}, using fallback")
                 return fallback_method(response)
     
-    def _should_regenerate_keywords(self, state: ExtractionState) -> str:
-        """Determine if keywords should be regenerated based on reflection"""
-        reflection = state["reflection_evaluation"]
-        if reflection and reflection.should_regenerate:
-            # Limit reflection iterations to avoid infinite loops
-            if state.get("reflection_iterations", 0) < 3:
-                return "regenerate"
-            else:
-                # If we've hit max iterations, proceed to human evaluation
-                state["messages"].append("⚠️ Maximum reflection iterations reached - proceeding to human evaluation")
-                return "proceed"
-        return "proceed"
-    
     def _get_human_action(self, state: ExtractionState) -> str:
         """Get the human action from validation feedback"""
         feedback = state["validation_feedback"]
         return feedback.action if feedback else "approve"
     
-    def _parse_reflection_response(self, response: str) -> ReflectionEvaluation:
-        """Fallback parsing for reflection evaluation"""
-        # Simple fallback - assume keywords are good if parsing fails
-        return ReflectionEvaluation(
-            overall_quality="good",
-            keyword_scores={},
-            issues_found=["Parser failed - using fallback"],
-            recommendations=["Review manually"],
-            should_regenerate=False
-        )
-
-
 if __name__ == "__main__":
-    # Example usage with structured parsers (using simple mode)
-    extractor = CoreConceptExtractor(model_name="qwen2.5:0.5b-instruct", use_checkpointer=False)
+    # Example usage with simplified workflow
+    extractor = CoreConceptExtractor(model_name="qwen2.5:32b-instruct", use_checkpointer=False)
     
     sample_text = """
     A smart irrigation system that uses soil moisture sensors and weather data 
@@ -600,9 +473,9 @@ if __name__ == "__main__":
     optimize plant care in agriculture and gardening.
     """
     
-    print("🚀 Starting patent seed keyword extraction with LangChain parsers...")
-    print("📋 Using structured output parsing for better reliability")
-    print("🔧 Running in simple mode (no checkpointer)")
+    print("🚀 Starting simplified patent seed keyword extraction...")
+    print("📋 3-step workflow: Extract concepts → Generate keywords → Human evaluation")
+    print("🔧 Using Qwen2.5:32b-instruct model")
     
     try:
         results = extractor.extract_keywords(sample_text)
@@ -612,21 +485,8 @@ if __name__ == "__main__":
         print("="*60)
         print(json.dumps(results, indent=2, ensure_ascii=False))
         
-        # Test individual parser components
-        print("\n" + "="*60)
-        print("🧪 TESTING PARSER COMPONENTS")
-        print("="*60)
-        
-        # Test concept matrix parser
-        concept_parser = extractor.prompts.get_concept_matrix_parser()
-        print(f"✅ Concept Matrix Parser: {type(concept_parser).__name__}")
-        
-        # Test seed keywords parser  
-        keywords_parser = extractor.prompts.get_seed_keywords_parser()
-        print(f"✅ Seed Keywords Parser: {type(keywords_parser).__name__}")
-        
-        print("\n🎉 All parsers loaded successfully!")
+        print("\n🎉 Workflow completed successfully!")
         
     except Exception as e:
         print(f"❌ Error during extraction: {e}")
-        print("Make sure Ollama is running and the model is available.")
+        print("Make sure Ollama is running and qwen2.5:32b-instruct model is available.")

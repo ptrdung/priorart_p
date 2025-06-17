@@ -1,12 +1,12 @@
 # Patent Seed Keyword Extraction System
 
-A system implementing a 4-step methodology with reflection and human-in-the-loop to extract seed keywords from technical/patent documents using LangChain, LangGraph and Ollama.
+A simplified system implementing a 3-step methodology with human-in-the-loop to extract seed keywords from technical/patent documents using LangChain, LangGraph and Ollama.
 
 ## 🏗️ Architecture
 
 - **LangChain**: LLM integration and prompt processing
-- **LangGraph**: Workflow with reflection and human-in-the-loop
-- **Ollama**: Local LLM (Qwen2.5:0.5b-instruct)
+- **LangGraph**: Simplified workflow with human-in-the-loop
+- **Ollama**: Local LLM (Qwen2.5:32b-instruct)
 - **Pydantic**: Data validation and structure
 
 ## 📦 Installation
@@ -18,13 +18,13 @@ pip install -r requirements.txt
 # Install Ollama (if not already installed)
 # https://ollama.ai/
 
-# Pull Qwen2.5 model
-ollama pull qwen2.5:0.5b-instruct
+# Pull Qwen2.5:32b model
+ollama pull qwen2.5:32b-instruct
 ```
 
 ## 🚀 Usage
 
-### 1. Interactive mode with new workflow
+### 1. Interactive mode with simplified workflow
 
 ```bash
 python demo_new_workflow.py
@@ -41,11 +41,11 @@ python demo.py
 ```python
 from core_concept_extractor import CoreConceptExtractor
 
-extractor = CoreConceptExtractor(model_name="qwen2.5:0.5b-instruct")
+extractor = CoreConceptExtractor(model_name="qwen2.5:32b-instruct")
 results = extractor.extract_keywords("Your patent description...")
 ```
 
-## 📋 4-Step Process with Reflection
+## 📋 Simplified 3-Step Process
 
 ### Step 1: Document Summary by Fields
 
@@ -58,56 +58,36 @@ results = extractor.extract_keywords("Your patent description...")
   - Environment/Field
   - Advantage/Result
 
-### Step 2: Main Keyword Generation
+### Step 2: Keyword Generation
 
 - From Concept Matrix → generate main keywords for each field
 - Focus on technical specificity and search effectiveness
-- Prioritize domain-specific terms and technical nouns
+- Use optimized prompts for better keyword quality
 
-### Step 3: Reflection Evaluation ⭐ NEW
+### Step 3: Human in the Loop Evaluation
 
-- **AI Self-Assessment**: Automatically evaluate keyword quality
-- **Quality Metrics**: Technical specificity, distinctiveness, completeness
-- **Smart Regeneration**: Auto-regenerate if quality is poor
-- **Iteration Limit**: Maximum 3 reflection cycles to avoid infinite loops
-- **Assessment Criteria**:
-  - Technical specificity level
-  - Search discriminative power
-  - Coverage completeness
-  - Redundancy detection
-  - Generic term filtering
-
-### Step 4: Human in the Loop Evaluation
-
-- Review AI-approved keywords with reflection assessment
-- Three options available:
+- Review generated keywords directly
+- Three simple options:
   1. **✅ Approve**: Export to JSON file
   2. **❌ Reject**: Restart from beginning  
   3. **✏️ Edit**: Manually modify keywords and finish
 
-## 🆕 Workflow Improvements
-
-### Enhanced Quality Control
-
-- **AI Reflection**: Automatic quality assessment before human review
-- **Intelligent Regeneration**: Keywords regenerated automatically if quality is poor
-- **Reflection Feedback**: Uses specific issues and recommendations for improvement
-- **Iteration Control**: Prevents infinite reflection loops with maximum iteration limit
+## 🆕 Simplified Workflow Benefits
 
 ### Streamlined Process
 
-- **Step 1-3**: Run automatically without interruption
-- **Final Review**: Human evaluation only after AI approval
-- **Better Context**: Users see both final keywords AND AI assessment
-- **Targeted Feedback**: Rejection provides feedback for full restart
+- **Direct Path**: 3 steps without complex intermediate evaluations
+- **Faster Execution**: No AI reflection delays
+- **Clear Decisions**: Simple human choices at the end
+- **Better Performance**: Uses powerful Qwen2.5:32b model for higher quality
 
 ### Benefits
 
-- 🤖 **AI Quality Gate**: Automatic filtering of poor-quality keywords
-- 🎯 **Higher Baseline**: Human review starts with AI-approved keywords  
-- 📊 **Transparency**: See AI reasoning and assessment scores
-- 🔄 **Smart Iterations**: Reflection uses specific feedback for improvements
-- ⚡ **Efficiency**: Less human intervention for obviously poor results
+- ⚡ **Speed**: Direct 3-step process
+- 🎯 **Simplicity**: Clear workflow with single human decision point
+- 🧠 **Quality**: Powerful 32b model produces better initial results
+- 🛠️ **Control**: Direct editing capability for keyword refinement
+- 🔄 **Efficiency**: Quick restart option with feedback
 
 ## 📁 File Structure
 

@@ -19,15 +19,6 @@ class ConceptMatrixOutput(BaseModel):
     advantage_result: str = Field(description="Advantage/Result")
 
 
-class ReflectionEvaluationOutput(BaseModel):
-    """Output model for reflection evaluation of keywords"""
-    overall_quality: str = Field(description="Overall quality assessment: 'good' or 'poor'")
-    keyword_scores: Dict[str, float] = Field(description="Score for each category (0-1)")
-    issues_found: List[str] = Field(description="List of specific issues identified")
-    recommendations: List[str] = Field(description="Recommendations for improvement")
-    should_regenerate: bool = Field(description="Whether keywords should be regenerated")
-
-
 class SeedKeywordsOutput(BaseModel):
     """Output model for Phase 2 and 3 keyword extraction"""
     problem_purpose_keywords: List[str] = Field(description="Problem/Purpose keywords")
@@ -150,61 +141,7 @@ Return the final list of improved keywords in the following format:
         
         return prompt, parser
     
-    @staticmethod
-    def get_reflection_prompt_and_parser():
-        """Reflection: Evaluate the quality of extracted keywords"""
-        parser = PydanticOutputParser(pydantic_object=ReflectionEvaluationOutput)
-        
-        prompt = PromptTemplate(
-            template="""You are an expert patent keyword quality assessor with deep expertise in evaluating keyword sets for patent search effectiveness.
-
-**Task:**  
-Evaluate the quality of the following extracted keywords based on the original concept matrix. Provide a thorough assessment to determine if the keywords are suitable for patent search or need regeneration.
-
-**Original Concept Matrix:**  
-- Problem/Purpose: {problem_purpose}  
-- Object/System: {object_system}  
-- Action/Method: {action_method}  
-- Key Technical Feature: {key_technical_feature}  
-- Environment/Field: {environment_field}  
-- Advantage/Result: {advantage_result}  
-
-**Current Keywords:**  
-- Problem/Purpose Keywords: {problem_purpose_keywords}  
-- Object/System Keywords: {object_system_keywords}  
-- Action/Method Keywords: {action_method_keywords}  
-- Key Technical Feature Keywords: {key_technical_feature_keywords}  
-- Environment/Field Keywords: {environment_field_keywords}  
-- Advantage/Result Keywords: {advantage_result_keywords}  
-
-**Evaluation Criteria:**  
-1. **Technical Specificity**: Are keywords technically specific and domain-relevant?
-2. **Distinctiveness**: Do keywords have high discriminative power for patent search?
-3. **Completeness**: Do keywords adequately cover the technical concepts?
-4. **Redundancy**: Are there duplicate or overly similar terms?
-5. **Generic Terms**: Are there too many generic/common words?
-6. **Search Effectiveness**: Would these keywords help find relevant prior art?
-
-**Instructions:**  
-- Provide an **overall quality assessment** as either "good" or "poor"
-- Score each keyword category from 0.0 to 1.0 (0=poor, 1=excellent)
-- List specific **issues found** (e.g., "Too generic terms in object_system", "Missing key technical concepts")
-- Provide **actionable recommendations** for improvement
-- Set **should_regenerate** to true if keywords need to be regenerated, false if they are acceptable
-
-This is iteration #{iteration} of the reflection process.
-
-{format_instructions}
-""",
-            input_variables=["problem_purpose", "object_system", "action_method", 
-                           "key_technical_feature", "environment_field", "advantage_result",
-                           "problem_purpose_keywords", "object_system_keywords", "action_method_keywords",
-                           "key_technical_feature_keywords", "environment_field_keywords", 
-                           "advantage_result_keywords", "iteration"],
-            partial_variables={"format_instructions": parser.get_format_instructions()}
-        )
-        
-        return prompt, parser
+    # Phương thức reflection đã được loại bỏ trong workflow mới
 
     # Legacy methods for backward compatibility
     @staticmethod
@@ -222,28 +159,23 @@ This is iteration #{iteration} of the reflection process.
         prompt, _ = ExtractionPrompts.get_phase3_prompt_and_parser()
         return prompt
     
-    @staticmethod
-    def get_reflection_prompt():
-        prompt, _ = ExtractionPrompts.get_reflection_prompt_and_parser()
-        return prompt
-    
-    # Simple message collections
+    # Simplified message collections
     @staticmethod
     def get_validation_messages():
         return {
             "title": "🔍 KEYWORD EXTRACTION RESULTS",
             "separator": "="*60,
-            "final_evaluation_title": "🎯 FINAL KEYWORD EVALUATION - HUMAN IN THE LOOP",
+            "final_evaluation_title": "🎯 FINAL EVALUATION - HUMAN DECISION",
             "concept_matrix_header": "\n📋 Concept Matrix:",
-            "seed_keywords_header": "\n🔑 Final Seed Keywords:",
+            "seed_keywords_header": "\n🔑 Generated Keywords:",
             "divider": "\n" + "-"*60,
-            "action_options": "\n📝 Choose your action:\n  1. ✅ Approve - Export to JSON file\n  2. ❌ Reject - Restart from beginning\n  3. ✏️  Edit - Manually modify keywords",
+            "action_options": "\n📝 Choose your action:\n  1. ✅ Approve - Export to JSON file\n  2. ❌ Reject - Restart workflow\n  3. ✏️  Edit - Manually modify keywords",
             "action_prompt": "\nEnter your choice [1/2/3 or approve/reject/edit]: ",
             "reject_feedback_prompt": "\nOptional: Provide feedback for improvement: ",
             "invalid_action": "❌ Invalid choice. Please enter 1, 2, 3, approve, reject, or edit.",
-            "approved": "✅ Keywords approved by user",
-            "edited": "✏️ Keywords manually edited by user", 
-            "rejected": "❌ Keywords rejected - restarting extraction"
+            "approved": "✅ Keywords approved - exporting to JSON",
+            "edited": "✏️ Keywords manually edited", 
+            "rejected": "❌ Keywords rejected - restarting workflow"
         }
     
     @staticmethod
@@ -264,9 +196,7 @@ This is iteration #{iteration} of the reflection process.
     def get_seed_keywords_parser():
         return PydanticOutputParser(pydantic_object=SeedKeywordsOutput)
     
-    @staticmethod
-    def get_reflection_evaluation_parser():
-        return PydanticOutputParser(pydantic_object=ReflectionEvaluationOutput)
+    # Phương thức reflection đã được loại bỏ trong workflow mới
 
 
 if __name__ == "__main__":
@@ -276,12 +206,10 @@ if __name__ == "__main__":
     phase1_prompt, phase1_parser = ExtractionPrompts.get_phase1_prompt_and_parser()
     phase2_prompt, phase2_parser = ExtractionPrompts.get_phase2_prompt_and_parser()
     phase3_prompt, phase3_parser = ExtractionPrompts.get_phase3_prompt_and_parser()
-    reflection_prompt, reflection_parser = ExtractionPrompts.get_reflection_prompt_and_parser()
     
     print("✅ Phase 1 prompt and parser created")
     print("✅ Phase 2 prompt and parser created")
     print("✅ Phase 3 prompt and parser created")
-    print("✅ Reflection prompt and parser created")
     
     # Test messages
     validation_msgs = ExtractionPrompts.get_validation_messages()
