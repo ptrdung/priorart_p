@@ -402,7 +402,7 @@ To complete the task, you need to follow these steps:
 </INSTRUCTIONS>
 
 <CONSTRAINTS>
-Dos:
+Do:
 - Include only terms that appear (exactly or inflected) in at least one snippet for core synonyms
 - Ensure core synonyms retain the same technical function as the original keyword
 - Limit core synonyms to 5-8 terms maximum
@@ -411,7 +411,7 @@ Dos:
 - Provide rationale for each related term
 - Reference source snippet numbers for all terms
 
-Don'ts:
+Don't:
 - Don't include terms not found in the provided snippets for core synonyms
 - Don't list full synonyms in the related terms section
 - Don't exceed the specified term limits
@@ -448,7 +448,7 @@ The output format must be JSON format:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. Core synonyms must appear in snippets and retain identical technical function. Related terms should be broader/adjacent concepts. All terms require source attribution and justification. Output must be in valid JSON format with the specified structure.
+Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. Core synonyms must appear in snippets and retain identical technical function. Related terms should be broader/adjacent concepts. All terms require source attribution and justification. IMPORTANT: Only generate the JSON output as defined - do not provide explanations, commentary, or any additional text beyond the required JSON format.
 </RECAP>
         """
 

@@ -97,7 +97,7 @@ Document:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Extract factual information for each Concept Matrix component using only explicit information from the document. Maintain technical precision, avoid assumptions, and ensure each component contains unique information. Use the exact JSON format specified above.
+Extract factual information for each Concept Matrix component using only explicit information from the document. Maintain technical precision, avoid assumptions, and ensure each component contains unique information. IMPORTANT: Only generate the JSON output as defined - do not provide explanations, commentary, or any additional text beyond the required JSON format.
 </RECAP>""",
             input_variables=["input_text"],
             partial_variables={"format_instructions": parser.get_format_instructions()}
@@ -156,7 +156,7 @@ A discriminative term is one that narrows down or uniquely identifies a technica
 </OUTPUT_FORMAT>
 
 <RECAP>
-Extract precise, distinctive technical keywords from each Concept Matrix component. Focus on discriminative terms, avoid generic language, ensure uniqueness across categories, and prioritize technical precision for effective patent search.
+Extract precise, distinctive technical keywords from each Concept Matrix component. Focus on discriminative terms, avoid generic language, ensure uniqueness across categories, and prioritize technical precision for effective patent search. IMPORTANT: Only generate the JSON output as defined - do not provide explanations, commentary, or any additional text beyond the required JSON format.
 </RECAP>""",
             input_variables=["problem_purpose", "object_system", "environment_field"],
             partial_variables={"format_instructions": parser.get_format_instructions()}
@@ -215,7 +215,7 @@ The goal is to optimize these keywords for maximum effectiveness in patent prior
 </OUTPUT_FORMAT>
 
 <RECAP>
-Refine the seed keywords based on user feedback by adding missing technical terms, removing generic terms, ensuring technical precision, eliminating duplicates, and optimizing for maximum discriminative value in patent search. Use the exact JSON format specified above.
+Refine the seed keywords based on user feedback by adding missing technical terms, removing generic terms, ensuring technical precision, eliminating duplicates, and optimizing for maximum discriminative value in patent search. IMPORTANT: Only generate the JSON output as defined - do not provide explanations, commentary, or any additional text beyond the required JSON format.
 </RECAP>""",
             input_variables=["current_keywords", "feedback"],
             partial_variables={"format_instructions": parser.get_format_instructions()}
@@ -273,7 +273,7 @@ The summary should serve as a technical abstract that captures the essence of th
 </OUTPUT_FORMAT>
 
 <RECAP>
-Generate a concise technical summary (max 400 words) focusing on core technical features, structure, operation principles, and specific applications. Use scientific language, maintain objectivity, and exclude non-technical elements. Provide only the summary in the specified JSON format.
+Generate a concise technical summary (max 400 words) focusing on core technical features, structure, operation principles, and specific applications. Use scientific language, maintain objectivity, and exclude non-technical elements. IMPORTANT: Only generate the JSON output as defined - do not provide explanations, commentary, or any additional text beyond the required JSON format.
 </RECAP>""",
             input_variables=["idea"],
             partial_variables={"format_instructions": parser.get_format_instructions()}
@@ -341,7 +341,7 @@ Strategy 3 (Advanced Proximity Query): Increased precision using proximity opera
 </OUTPUT_FORMAT>
 
 <RECAP>
-Generate 5 comprehensive patent search queries using the three specified strategies (Broad, Focused, Advanced Proximity) with Boolean and proximity operators. Provide raw query strings and logic explanations for each strategy to assess invention novelty and inventive step. Use the exact JSON format specified above.
+Generate 5 comprehensive patent search queries using the three specified strategies (Broad, Focused, Advanced Proximity) with Boolean and proximity operators. Provide raw query strings and logic explanations for each strategy to assess invention novelty and inventive step. IMPORTANT: Only generate the JSON output as defined - do not provide explanations, commentary, or any additional text beyond the required JSON format.
 </RECAP>""",
             input_variables=["summary", "problem_purpose_keys", "object_system_keys", "environment_field_keys", "CPC_CODES"],
             partial_variables={"format_instructions": parser.get_format_instructions()}
