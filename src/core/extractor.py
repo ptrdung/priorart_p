@@ -29,6 +29,9 @@ from langchain.prompts import PromptTemplate
 from langchain_core.prompts import ChatPromptTemplate
 import requests
 
+# Import settings from config
+from config.settings import settings
+
 # Local imports with updated paths
 from ..api.ipc_classifier import get_ipc_predictions
 from ..prompts.extraction_prompts import ExtractionPrompts
@@ -37,8 +40,8 @@ from ..evaluation.similarity_evaluator import (
     eval_url, prompt, parse_idea_text, parse_idea_input, extract_user_info
 )
 
-# Set up Tavily API key
-os.environ["TAVILY_API_KEY"] = "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"
+# Set up Tavily API key from settings
+os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 
 # Data Models
 class ConceptMatrix(BaseModel):
@@ -94,7 +97,7 @@ class ExtractionState(TypedDict):
 class CoreConceptExtractor:
     """Patent seed keyword extraction system"""
     
-    def __init__(self, model_name: str = "qwen3:4b", use_checkpointer: bool = False):
+    def __init__(self, model_name: str = None, use_checkpointer: bool = None):
         """
         Initialize the CoreConceptExtractor.
         
@@ -102,9 +105,13 @@ class CoreConceptExtractor:
             model_name: Name of the LLM model to use
             use_checkpointer: Whether to use checkpointer for graph state
         """
-        self.llm = Ollama(model=model_name, temperature=0.7)
+        # Use settings from config file with fallback to parameters
+        self.model_name = model_name if model_name is not None else settings.DEFAULT_MODEL_NAME
+        self.use_checkpointer = use_checkpointer if use_checkpointer is not None else settings.USE_CHECKPOINTER
+        
+        self.llm = Ollama(model=self.model_name, temperature=settings.MODEL_TEMPERATURE)
         self.tavily_search = TavilySearch(
-            max_results=5,
+            max_results=settings.MAX_SEARCH_RESULTS,
             topic="general",
             include_answer=True,
             include_raw_content=False,
@@ -178,7 +185,7 @@ class CoreConceptExtractor:
         
         if self.use_checkpointer:
             # Configuration for LangGraph with checkpointer
-            config = {"configurable": {"thread_id": "extraction_thread_1"}}
+            config = {"configurable": {"thread_id": settings.THREAD_ID}}
             result = self.graph.invoke(initial_state, config)
         else:
             # Simple invocation without checkpointer
@@ -381,29 +388,68 @@ class CoreConceptExtractor:
             return snippets
 
         prompt_template = """
-            You are a patent linguist. Analyze the following technical snippets to extract high-precision synonyms.
+<OBJECTIVE_AND_PERSONA>
+You are a patent linguist specializing in technical terminology analysis. Your task is to analyze provided technical snippets and extract high-precision synonyms and related terms for patent search optimization.
+</OBJECTIVE_AND_PERSONA>
 
-            ### Keyword: {keyword}
-            ### Field descriptions for Keyword: {context}
+<INSTRUCTIONS>
+To complete the task, you need to follow these steps:
+1. Analyze the provided technical snippets for the given keyword
+2. Extract core synonyms that appear in the snippets and retain the same technical function
+3. Identify related terms that are broader, adjacent, or complementary to the keyword
+4. Provide justifications for each term based on snippet evidence
+5. Format the output as two distinct JSON lists
+</INSTRUCTIONS>
 
-            ### Snippets:
-            {snippets}
+<CONSTRAINTS>
+Dos:
+- Include only terms that appear (exactly or inflected) in at least one snippet for core synonyms
+- Ensure core synonyms retain the same technical function as the original keyword
+- Limit core synonyms to 5-8 terms maximum
+- Limit related terms to 5 terms maximum
+- Provide clear justifications (≤10 words) for each core synonym
+- Provide rationale for each related term
+- Reference source snippet numbers for all terms
 
-            ### Task:
-            Produce two lists:
+Don'ts:
+- Don't include terms not found in the provided snippets for core synonyms
+- Don't list full synonyms in the related terms section
+- Don't exceed the specified term limits
+- Don't provide justifications longer than 10 words for core synonyms
+- Don't include terms without proper source attribution
+</CONSTRAINTS>
 
-            ## A. Core Synonyms (5–8 terms)
-            - Must appear (exactly or inflected) in at least one snippet
-            - Must retain same technical function
-            - Format:  
-            1. <term> — <10-word justification> ‹src n›
+<CONTEXT>
+Keyword: {keyword}
+Field Description: {context}
 
-            ## B. Related Terms (≤5 terms)
-            - Broader, adjacent, or complementary (not full synonyms)
-            - Format:  
-            1. <term> — <rationale> ‹src n›
+Technical Snippets:
+{snippets}
+</CONTEXT>
 
-            Only return the two lists below.
+<OUTPUT_FORMAT>
+The output format must be JSON format:
+{{
+    "core_synonyms": [
+        {{
+            "term": "example_term",
+            "justification": "appears frequently with same technical meaning",
+            "source": "src 1"
+        }}
+    ],
+    "related_terms": [
+        {{
+            "term": "broader_term",
+            "rationale": "encompasses the keyword within larger technical context",
+            "source": "src 2"
+        }}
+    ]
+}}
+</OUTPUT_FORMAT>
+
+<RECAP>
+Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. Core synonyms must appear in snippets and retain identical technical function. Related terms should be broader/adjacent concepts. All terms require source attribution and justification. Output must be in valid JSON format with the specified structure.
+</RECAP>
         """
 
         prompt = PromptTemplate.from_template(prompt_template)
@@ -423,28 +469,64 @@ class CoreConceptExtractor:
                 "snippets": formatted_snippets,
                 "context": context,
             })
-            syn_raw = result
-            raws = syn_raw.split("\n")
+            
+            try:
+                # Try to parse JSON response
+                result_clean = result.strip()
+                if result_clean.startswith("```json"):
+                    result_clean = result_clean.replace("```json", "").replace("```", "")
+                
+                parsed_result = json.loads(result_clean)
+                
+                # Extract terms from both core synonyms and related terms
+                res = []
+                
+                # Add core synonyms
+                if "core_synonyms" in parsed_result:
+                    for item in parsed_result["core_synonyms"]:
+                        if isinstance(item, dict) and "term" in item:
+                            res.append(item["term"])
+                        elif isinstance(item, str):
+                            res.append(item)
+                
+                # Add related terms
+                if "related_terms" in parsed_result:
+                    for item in parsed_result["related_terms"]:
+                        if isinstance(item, dict) and "term" in item:
+                            res.append(item["term"])
+                        elif isinstance(item, str):
+                            res.append(item)
+                
+                sys_keys[keyword] = res
+                print(f"✅ Extracted {len(res)} terms for '{keyword}': {res}")
+                
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"⚠️ JSON parsing failed for '{keyword}': {e}")
+                print(f"Raw result: {result}")
+                
+                # Fallback to original parsing method
+                syn_raw = result
+                raws = syn_raw.split("\n")
 
-            st = 0
-            et = 0
-            for i in range(len(raws)):
-                if "A. Core Synonyms" in raws[i]:
-                    st = i+1
-                    for j in range(st+1, len(raws)):
-                        if "B. Related Terms" in raws[j]:
-                            et = j
-                            break
-                    break
-            raws = raws[st:et]
-            res = []
-            for item in raws:
-                try:
-                    res.append(item.split("—")[0].split(".")[1].strip())
-                except:
-                    pass
+                st = 0
+                et = 0
+                for i in range(len(raws)):
+                    if "A. Core Synonyms" in raws[i]:
+                        st = i+1
+                        for j in range(st+1, len(raws)):
+                            if "B. Related Terms" in raws[j]:
+                                et = j
+                                break
+                        break
+                raws = raws[st:et]
+                res = []
+                for item in raws:
+                    try:
+                        res.append(item.split("—")[0].split(".")[1].strip())
+                    except:
+                        pass
 
-            sys_keys[keyword] = res
+                sys_keys[keyword] = res
 
         concept_matrix = state["concept_matrix"].dict()
         seed_keywords = state["seed_keywords"].dict()

@@ -6,6 +6,7 @@ Module for interacting with WIPO IPC classification service
 import xml.etree.ElementTree as ET
 import requests
 from typing import List, Dict, Any
+from config.settings import settings
 
 
 def format_ipc_code(raw_code: str) -> str:
@@ -67,8 +68,8 @@ def get_ipc_classification(query: str) -> str:
 <request>
   <lang>en</lang>
   <text>{query}</text>
-  <numberofpredictions>3</numberofpredictions>
-  <hierarchiclevel>SUBGROUP</hierarchiclevel>
+  <numberofpredictions>{settings.IPC_PREDICTIONS_COUNT}</numberofpredictions>
+  <hierarchiclevel>{settings.IPC_HIERARCHIC_LEVEL}</hierarchiclevel>
 </request>"""
     
     headers = {
@@ -76,7 +77,7 @@ def get_ipc_classification(query: str) -> str:
     }
     
     response = requests.post(
-        url='https://ipccat.wipo.int/EN/query',
+        url=settings.IPC_API_URL,
         data=xml_data,
         headers=headers
     )
