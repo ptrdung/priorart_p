@@ -251,13 +251,8 @@ class CoreConceptExtractor:
                 "input_text": normalized_input.normalized_text  # Use normalized text for all subsequent processing
             }
             
-            logger.info("📊 Input Quality Assessment:")
-            logger.info(f"  • Type: {normalized_input.input_type}")
-            logger.info(f"  • Language: {normalized_input.language}")
-            logger.info(f"  • Completeness: {normalized_input.completeness_score:.2f}")
-            logger.info(f"  • Complexity: {normalized_input.technical_complexity}")
-            if normalized_input.quality_notes:
-                logger.info(f"  • Notes: {normalized_input.quality_notes}")
+            # Log only the normalized input text
+            logger.info(f"📝 Normalized input: {normalized_input.normalized_text}")
             
             logger.info(msgs["processing_complete"])
             
