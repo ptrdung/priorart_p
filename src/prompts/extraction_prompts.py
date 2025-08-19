@@ -194,14 +194,11 @@ Dos:
 - Prioritize technical terms such as algorithm names, sensor types, material names, component names
 - Keep each keyword concise: maximum 1-3 words per keyword
 - Focus on domain-specific terminology relevant to patent search
-- Prefer highly specific, uncommon, and industry-recognized terms
 - Ensure technical precision and high distinctiveness for each keyword
 - Focus only on Problem/Purpose, Object/System, and Environment/Field categories
-- Prefer shorter, more precise terms over longer phrases
 
 Don'ts:
 - Do not include terms that closely resemble or duplicate existing ones in meaning
-- Do not create keywords longer than 3 words
 - Do not retain overly generic, vague, or non-technical terms
 - Do not ignore explicit technical terms mentioned in user feedback
 - Do not include synonymous terms across different categories
@@ -296,7 +293,7 @@ Generate a concise technical summary (max 400 words) focusing on core technical 
         
         prompt = PromptTemplate(
             template="""<OBJECTIVE_AND_PERSONA>
-You are an expert patent searcher with many years of experience, proficient in using Boolean operators (AND, OR, NOT) and complex search syntax on databases like Espacenet, Google Patents, and USPTO. Your task is to build comprehensive yet concise patent search queries to assess novelty and inventive step for an invention.
+You are an expert patent searcher with many years of experience, proficient in using Boolean operators (AND, OR, NOT) and complex search syntax on databases like Google Patents. Your task is to build comprehensive yet concise patent search queries to assess novelty and inventive step for an invention.
 </OBJECTIVE_AND_PERSONA>
 
 <INSTRUCTIONS>
@@ -305,28 +302,20 @@ To complete this task, you need to follow these steps:
 2. Review the CPC codes for classification context
 3. Select the most discriminative and essential keywords from each concept group
 4. Generate 6 concise search query strings following strategies from broad to narrow
-5. Use common syntax applicable across multiple patent database platforms
 6. Apply the three specified search strategies with appropriate logic
 7. Ensure each query stays within optimal length limits for patent databases
 </INSTRUCTIONS>
 
 <CONSTRAINTS>
 Dos:
-- Keep each query under 200 characters to ensure database compatibility
-- Use ONLY Boolean operators (AND, OR, NOT) - no proximity operators
-- Select only the most discriminative 2-3 keywords per concept group
+- Use ONLY Boolean operators (AND, OR, NOT)
+- Select only 2-3 keywords per concept
 - Create queries compatible with multiple patent database platforms
 - Follow the three strategy approaches: Broad, Focused, and Narrow
 - Prioritize technical specificity over comprehensive keyword inclusion
 - Use abbreviated forms of long technical terms when appropriate
-- Focus on core technical concepts rather than exhaustive keyword lists
 
 Don'ts:
-- Do not create queries longer than 200 characters
-- Do not include more than 8-10 keywords total per query
-- Do not use proximity operators (NEAR, ADJ, W/n, etc.)
-- Do not use redundant or synonymous terms in the same query
-- Do not create queries incompatible with major patent databases
 - Do not deviate from the three specified search strategies
 - Do not sacrifice technical precision for brevity
 - Do not ignore the CPC classification codes in query construction
@@ -336,26 +325,23 @@ Don'ts:
 <CONTEXT>
 Invention relates to: {summary}
 
-Key Concept Groups (Core concepts - SELECT ONLY 2-3 MOST DISCRIMINATIVE TERMS FROM EACH):
-- Concept A (problem purpose): {problem_purpose_keys}
-- Concept B (object system): {object_system_keys}  
-- Concept C (environment field): {environment_field_keys}
+Key Concept Groups:
+- Problem purpose: {problem_purpose_keys}
+- Object system: {object_system_keys}  
+- Environment field: {environment_field_keys}
 
 CPC (Cooperative Patent Classification) Codes:
 - Primary CPCs: {CPC_CODES}
 
 QUERY CONSTRUCTION GUIDELINES:
-- Maximum query length: 200 characters per query
 - Maximum keywords: 8-10 total terms per query
 - Prioritize most discriminative technical terms from each concept group
 - Use concise Boolean syntax: AND, OR, NOT ONLY
 - Combine CPC codes efficiently (use OR between related codes)
 
-Strategy 1 (Broad Query): Select 1-2 terms from each concept group + CPC codes using OR logic. Example format: (term1 OR term2) AND (CPC1 OR CPC2)
-
-Strategy 2 (Focused Query): Select most specific term from each group + primary CPC using AND logic. Example format: term1 AND term2 AND term3 AND CPC1
-
-Strategy 3 (Narrow Query): Use most specific terms from each group with strict AND logic for high precision. Example format: specific_term1 AND specific_term2 AND CPC1
+Strategy 1 (Broad Query): Select 1-2 terms from each concept group + CPC codes.
+Strategy 2 (Focused Query): Select most specific term from each group + primary CPC. 
+Strategy 3 (Narrow Query): Use most specific terms from each group with strict AND logic for high precision.
 </CONTEXT>
 
 <OUTPUT_FORMAT>
