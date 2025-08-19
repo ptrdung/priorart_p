@@ -6,6 +6,7 @@ Main AI agent class for patent seed keyword extraction system
 import json
 import datetime
 import os
+import logging
 from typing import Any, Dict, List, Literal, Optional, cast
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
@@ -29,12 +30,24 @@ from langchain.prompts import PromptTemplate
 from langchain_core.prompts import ChatPromptTemplate
 import requests
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('patent_extractor.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # Import settings from config
 from config.settings import settings
 
 # Local imports with updated paths
 from ..api.ipc_classifier import get_ipc_predictions
 from ..prompts.extraction_prompts import ExtractionPrompts
+from ..prompts.normalization_prompts import NormalizationPrompts, NormalizedInputOutput
 from ..crawling.patent_crawler import lay_thong_tin_patent
 from ..evaluation.similarity_evaluator import (
     eval_url, prompt, parse_idea_text, parse_idea_input, extract_user_info
@@ -85,6 +98,7 @@ class ReflectionEvaluation(BaseModel):
 class ExtractionState(TypedDict):
     """Simplified state for LangGraph workflow"""
     input_text: str
+    normalized_input: Optional[NormalizedInputOutput]
     summary_text: str
     ipcs: Any 
     concept_matrix: Optional[ConceptMatrix]
@@ -119,8 +133,10 @@ class CoreConceptExtractor:
             include_image_descriptions=False,
         )
         self.prompts = ExtractionPrompts()
+        self.normalization_prompts = NormalizationPrompts()
         self.messages = ExtractionPrompts.get_phase_completion_messages()
         self.validation_messages = ExtractionPrompts.get_validation_messages()
+        self.normalization_messages = NormalizationPrompts.get_validation_messages()
         self.use_checkpointer = use_checkpointer
         self.graph = self._build_graph()
     
@@ -129,6 +145,7 @@ class CoreConceptExtractor:
         workflow = StateGraph(ExtractionState)
         
         # Add nodes for simplified 3-step process
+        workflow.add_node("input_normalization", self.input_normalization)
         workflow.add_node("step0", self.step0)
         workflow.add_node("step1_concept_extraction", self.step1_concept_extraction)
         workflow.add_node("step2_keyword_generation", self.step2_keyword_generation)
@@ -143,7 +160,8 @@ class CoreConceptExtractor:
         workflow.add_node("evalUrl", self.evalUrl)
 
         # Define simplified flow
-        workflow.set_entry_point("step0")
+        workflow.set_entry_point("input_normalization")
+        workflow.add_edge("input_normalization", "step0")
         workflow.add_edge("step0", "step1_concept_extraction")
         workflow.add_edge("step0", "summary_prompt_and_parser")
         workflow.add_edge("step1_concept_extraction", "step2_keyword_generation")
@@ -202,25 +220,85 @@ class CoreConceptExtractor:
             "final_url": result["final_url"] if result["final_url"] else None
         }
         
+    def input_normalization(self, state: ExtractionState) -> ExtractionState:
+        """Normalize and clean input text before processing"""
+        msgs = self.normalization_messages
+        logger.info(msgs["normalization_started"])
+        
+        # Get normalization prompt and parser
+        prompt, parser = self.normalization_prompts.get_input_normalization_prompt_and_parser()
+        
+        # Invoke LLM with normalization prompt
+        response = self.llm.invoke(prompt.format(input_text=state["input_text"]))
+        
+        try:
+            # Parse the normalization response
+            normalized_data = parser.parse(response)
+            normalized_input = NormalizedInputOutput(**normalized_data.dict())
+            
+            logger.info(msgs["normalization_completed"])
+            
+            # Show quality warnings if needed
+            if normalized_input.completeness_score < 0.5:
+                logger.warning(msgs["incomplete_input_warning"])
+            
+            if normalized_input.completeness_score < 0.3:
+                logger.warning(msgs["low_quality_warning"])
+            
+            # Update the input_text with the normalized version for downstream processing
+            updated_state = {
+                "normalized_input": normalized_input,
+                "input_text": normalized_input.normalized_text  # Use normalized text for all subsequent processing
+            }
+            
+            logger.info("📊 Input Quality Assessment:")
+            logger.info(f"  • Type: {normalized_input.input_type}")
+            logger.info(f"  • Language: {normalized_input.language}")
+            logger.info(f"  • Completeness: {normalized_input.completeness_score:.2f}")
+            logger.info(f"  • Complexity: {normalized_input.technical_complexity}")
+            if normalized_input.quality_notes:
+                logger.info(f"  • Notes: {normalized_input.quality_notes}")
+            
+            logger.info(msgs["processing_complete"])
+            
+            return updated_state
+            
+        except Exception as e:
+            logger.error(f"⚠️ Normalization parsing failed: {e}, using original input")
+            # Fallback: create basic normalized input if parsing fails
+            fallback_normalized = NormalizedInputOutput(
+                normalized_text=state["input_text"],
+                input_type="other",
+                language="unknown",
+                completeness_score=0.5,
+                technical_complexity="intermediate",
+                quality_notes="Normalization parsing failed, using original input"
+            )
+            
+            return {"normalized_input": fallback_normalized}
+
     def step0(self, state: ExtractionState) -> ExtractionState:
         """Initial step - pass through state"""
         return state
 
     def step1_concept_extraction(self, state: ExtractionState) -> ExtractionState:
         """Step 1: Extract concept summary from document according to fields"""
+        # Use the normalized input text for concept extraction
+        input_text = state["input_text"]  # This is now the normalized text
+        
         if not state["validation_feedback"]:
             prompt, parser = self.prompts.get_phase1_prompt_and_parser()
-            response = self.llm.invoke(prompt.format(input_text=state["input_text"]))
+            response = self.llm.invoke(prompt.format(input_text=input_text))
         else:
             prompt, parser = self.prompts.get_phase1_prompt_and_parser()
-            response = self.llm.invoke(prompt.format(input_text=state["input_text"]))
+            response = self.llm.invoke(prompt.format(input_text=input_text))
         
         try:
             # Use LangChain parser
             concept_data = parser.parse(response)
             concept_matrix = ConceptMatrix(**concept_data.dict())
         except Exception as e:
-            print(f"Parser failed: {e}, falling back to manual parsing")
+            logger.warning(f"Parser failed: {e}, falling back to manual parsing")
             # Fallback parsing if structured parsing fails
             concept_matrix = self._parse_concept_response(response)
         
@@ -239,7 +317,7 @@ class CoreConceptExtractor:
             keyword_data = parser.parse(response)
             seed_keywords = SeedKeywords(**keyword_data.dict())
         except Exception as e:
-            print(f"Parser failed: {e}, falling back to manual parsing")
+            logger.warning(f"Parser failed: {e}, falling back to manual parsing")
             seed_keywords = self._parse_keyword_response(response)
         
         return {"seed_keywords": seed_keywords}
@@ -319,9 +397,9 @@ class CoreConceptExtractor:
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(results, f, indent=2, ensure_ascii=False)
             
-            print(f"\n✅ Results exported to {filename}")
+            logger.info(f"✅ Results exported to {filename}")
         except Exception as e:
-            print(f"\n❌ Export failed: {str(e)}")
+            logger.error(f"❌ Export failed: {str(e)}")
         
         state["current_phase"] = "completed"
         
@@ -329,6 +407,7 @@ class CoreConceptExtractor:
     
     def _get_manual_edits(self, current_keywords: SeedKeywords) -> ValidationFeedback:
         """Get manual edits from user"""
+        logger.info("📝 Manual Editing Mode")
         print("\n📝 Manual Editing Mode")
         print("Current keywords will be displayed. Press Enter to keep current value, or type new keywords separated by commas.")
         
@@ -457,10 +536,10 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
         sys_keys = {}
 
         def generate_synonyms(keyword: str, context: str):
-            print(f"\n🔍 Searching snippets for keyword: {keyword}...\n")
+            logger.info(f"🔍 Searching snippets for keyword: {keyword}")
             snippets = search_snippets(keyword)
             if not snippets:
-                print("❌ No snippets found.")
+                logger.warning(f"❌ No snippets found for keyword: {keyword}")
                 return
 
             formatted_snippets = "\n".join([f"[{i+1}] {s}" for i, s in enumerate(snippets)])
@@ -498,11 +577,11 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
                             res.append(item)
                 
                 sys_keys[keyword] = res
-                print(f"✅ Extracted {len(res)} terms for '{keyword}': {res}")
+                logger.info(f"✅ Extracted {len(res)} terms for '{keyword}': {res}")
                 
             except (json.JSONDecodeError, KeyError) as e:
-                print(f"⚠️ JSON parsing failed for '{keyword}': {e}")
-                print(f"Raw result: {result}")
+                logger.warning(f"⚠️ JSON parsing failed for '{keyword}': {e}")
+                logger.debug(f"Raw result: {result}")
                 
                 # Fallback to original parsing method
                 syn_raw = result
@@ -550,7 +629,7 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
     def call_ipcs_api(self, state: ExtractionState) -> ExtractionState:
         """Call IPC classification API"""
         ipcs = get_ipc_predictions(state["summary_text"])
-        print(ipcs)
+        logger.info(f"📋 IPC classification results: {ipcs}")
         return {"ipcs": ipcs}
 
     def genQuery(self, state: ExtractionState) -> ExtractionState:
@@ -573,6 +652,7 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
         ))
 
         concept_data = parser.parse(response)
+        logger.info(f"🔍 Generated {len(concept_data.queries)} search queries")
         return {"queries": concept_data}
 
     def genUrl(self, state: ExtractionState) -> ExtractionState:
@@ -580,6 +660,8 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
         final_url = list()
 
         queries = state["queries"].queries
+        logger.info(f"🌐 Searching for URLs using {len(queries)} queries")
+        
         for query in queries:
             url = "https://api.search.brave.com/res/v1/web/search"
             params = {
@@ -600,34 +682,49 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
                         if url:
                             final_url.append(url)
                 except:
-                    print(f"{query} is not found")
+                    logger.warning(f"❌ No results found for query: {query}")
+            else:
+                logger.error(f"❌ Search API request failed for query: {query} (status: {response.status_code})")
 
+        logger.info(f"🔗 Found {len(final_url)} URLs from search results")
         return {"final_url": final_url}
 
     def evalUrl(self, state: ExtractionState) -> ExtractionState:
         """Evaluate URLs for relevance"""
         final_url = list()
+        logger.info(f"📊 Evaluating {len(state['final_url'])} URLs for relevance")
+        
         for url in state["final_url"]:
             temp_score = dict()
             temp_score['url'] = url 
             temp_score['user_scenario'] = 0
             temp_score['user_problem'] = 0
             
-            result = parse_idea_input(state["input_text"])
-            temp = lay_thong_tin_patent(url)
-            ex_text = prompt(temp['abstract'], temp['description'], temp['claims'])
-            res = self.llm.invoke(ex_text)
-            print(res)
-            res = res.replace("```json", '')
-            res = res.replace("```", '')
-            data_res = json.loads(res)
-            res_data = extract_user_info(data_res)
-            
-            score_scenario = eval_url(result["user_scenario"], res_data['user_scenario'])
-            score_problem = eval_url(result["user_problem"], res_data['user_problem'])
-            
-            temp_score['user_scenario'] = score_scenario['llm_score']
-            temp_score['user_problem'] = score_problem['llm_score']
-            final_url.append(temp_score)
+            try:
+                result = parse_idea_input(state["input_text"])
+                temp = lay_thong_tin_patent(url)
+                ex_text = prompt(temp['abstract'], temp['description'], temp['claims'])
+                res = self.llm.invoke(ex_text)
+                logger.debug(f"📄 LLM evaluation response for {url}: {res}")
+                
+                res = res.replace("```json", '')
+                res = res.replace("```", '')
+                data_res = json.loads(res)
+                res_data = extract_user_info(data_res)
+                
+                score_scenario = eval_url(result["user_scenario"], res_data['user_scenario'])
+                score_problem = eval_url(result["user_problem"], res_data['user_problem'])
+                
+                temp_score['user_scenario'] = score_scenario['llm_score']
+                temp_score['user_problem'] = score_problem['llm_score']
+                final_url.append(temp_score)
+                
+                logger.info(f"✅ Evaluated URL: {url} (scenario: {temp_score['user_scenario']}, problem: {temp_score['user_problem']})")
+                
+            except Exception as e:
+                logger.error(f"❌ Error evaluating URL {url}: {str(e)}")
+                # Add URL with zero scores if evaluation fails
+                final_url.append(temp_score)
         
+        logger.info(f"📊 Completed evaluation of {len(final_url)} URLs")
         return {"final_url": final_url}
