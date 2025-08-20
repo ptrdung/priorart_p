@@ -295,50 +295,36 @@ class CoreConceptExtractor:
         
         return {"seed_keywords": seed_keywords}
     
-    def step3_human_evaluation(self, state: ExtractionState) -> ExtractionState:
-        """Step 3: Human in the loop evaluation with three options"""
+    def step3_human_evaluation(self, state: ExtractionState, action: str = None, feedback_text: str = None, edited_keywords: SeedKeywords = None) -> ExtractionState:
+        """
+        Step 3: Human in the loop evaluation with three options.
+        Now supports web input via parameters:
+        - action: "approve", "reject", "edit"
+        - feedback_text: optional feedback for "reject"
+        - edited_keywords: optional SeedKeywords for "edit"
+        """
         msgs = self.validation_messages
-        
-        print("\n" + msgs["separator"])
-        print(msgs["final_evaluation_title"])
-        print(msgs["separator"])
-        
-        # Display final results
+
         concept_matrix = state["concept_matrix"]
         seed_keywords = state["seed_keywords"]
-        
-        print(msgs["concept_matrix_header"])
-        for field, value in concept_matrix.dict().items():
-            print(f"  • {field.replace('_', ' ').title()}: {value}")
-        
-        print(msgs["seed_keywords_header"])
-        for field, keywords in seed_keywords.dict().items():
-            print(f"  • {field.replace('_', ' ').title()}: {keywords}")
-        
-        print(msgs["divider"])
-        print(msgs["action_options"])
-        
-        # Get user action
-        while True:
-            action = input(msgs["action_prompt"]).lower().strip()
-            if action in ['1', 'approve', 'a']:
-                feedback = ValidationFeedback(action="approve")
-                break
-            elif action in ['2', 'reject', 'r']:
-                feedback_text = input(msgs["reject_feedback_prompt"])
-                feedback = ValidationFeedback(action="reject", feedback=feedback_text)
-                # Clear concept_matrix and seed_keywords to force regeneration
-                state["concept_matrix"] = None
-                state["seed_keywords"] = None
-                break
-            elif action in ['3', 'edit', 'e']:
-                feedback = self._get_manual_edits(seed_keywords)
-                break
-            else:
-                print(msgs["invalid_action"])
-        
+
+        # If no action provided, default to approve
+        if action is None:
+            action = "approve"
+
+        if action == "approve":
+            feedback = ValidationFeedback(action="approve")
+        elif action == "reject":
+            feedback = ValidationFeedback(action="reject", feedback=feedback_text)
+            state["concept_matrix"] = None
+            state["seed_keywords"] = None
+        elif action == "edit":
+            feedback = ValidationFeedback(action="edit", edited_keywords=edited_keywords)
+        else:
+            feedback = ValidationFeedback(action="approve")
+
         state["validation_feedback"] = feedback
-        
+
         return {"validation_feedback": feedback}
 
     def manual_editing(self, state: ExtractionState) -> ExtractionState:
@@ -350,26 +336,18 @@ class CoreConceptExtractor:
         
         return {"seed_keywords": feedback.edited_keywords}
     
-    def _get_manual_edits(self, current_keywords: SeedKeywords) -> ValidationFeedback:
-        """Get manual edits from user"""
+    def _get_manual_edits(self, current_keywords: SeedKeywords, edited_data: dict = None) -> ValidationFeedback:
+        """
+        Get manual edits from user.
+        Now supports web input via edited_data dict:
+        - edited_data: dict with keys matching SeedKeywords fields, values are lists of strings.
+        """
         logger.info("📝 Manual Editing Mode")
-        print("\n📝 Manual Editing Mode")
-        print("Current keywords will be displayed. Press Enter to keep current value, or type new keywords separated by commas.")
-        
-        edited_data = {}
-        
-        for field, keywords in current_keywords.dict().items():
-            field_name = field.replace('_', ' ').title()
-            current_str = ", ".join(keywords)
-            print(f"\n{field_name}: [{current_str}]")
-            
-            new_input = input(f"New {field_name} (or Enter to keep): ").strip()
-            if new_input:
-                edited_data[field] = [kw.strip() for kw in new_input.split(',') if kw.strip()]
-            else:
-                edited_data[field] = keywords
-        
-        edited_keywords = SeedKeywords(**edited_data)
+        if edited_data is None:
+            # If no edits provided, keep current keywords
+            edited_keywords = current_keywords
+        else:
+            edited_keywords = SeedKeywords(**edited_data)
         return ValidationFeedback(action="edit", edited_keywords=edited_keywords)
       
     def _parse_concept_response(self, response: str) -> ConceptMatrix:
