@@ -47,7 +47,6 @@ from config.settings import settings
 # Local imports with updated paths
 from ..api.ipc_classifier import get_ipc_predictions
 from ..prompts.extraction_prompts import ExtractionPrompts
-from ..prompts.normalization_prompts import NormalizationPrompts, NormalizedInputOutput
 from ..crawling.patent_crawler import lay_thong_tin_patent
 from ..evaluation.similarity_evaluator import (
     eval_url, prompt, parse_idea_text, parse_idea_input, extract_user_info
@@ -57,6 +56,15 @@ from ..evaluation.similarity_evaluator import (
 os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 
 # Data Models
+class NormalizationOutput(BaseModel):
+    """Output model for input normalization"""
+    problem: str = Field(
+        description="Normalized technical problem or objective described in the document."
+    )
+    technical: str = Field(
+        description="Normalized technical content or context of the document."
+    )
+
 class ConceptMatrix(BaseModel):
     """Output model for extracting core patent search concepts from technical documents"""
     problem_purpose: str = Field(
@@ -98,7 +106,8 @@ class ReflectionEvaluation(BaseModel):
 class ExtractionState(TypedDict):
     """Simplified state for LangGraph workflow"""
     input_text: str
-    normalized_input: Optional[NormalizedInputOutput]
+    problem: Optional[str]
+    technical: Optional[str]
     summary_text: str
     ipcs: Any 
     concept_matrix: Optional[ConceptMatrix]
@@ -133,10 +142,8 @@ class CoreConceptExtractor:
             include_image_descriptions=False,
         )
         self.prompts = ExtractionPrompts()
-        self.normalization_prompts = NormalizationPrompts()
         self.messages = ExtractionPrompts.get_phase_completion_messages()
         self.validation_messages = ExtractionPrompts.get_validation_messages()
-        self.normalization_messages = NormalizationPrompts.get_validation_messages()
         self.use_checkpointer = use_checkpointer
         self.graph = self._build_graph()
     
@@ -225,52 +232,35 @@ class CoreConceptExtractor:
         msgs = self.normalization_messages
         logger.info(msgs["normalization_started"])
         
-        # Get normalization prompt and parser
-        prompt, parser = self.normalization_prompts.get_input_normalization_prompt_and_parser()
-        
-        # Invoke LLM with normalization prompt
-        response = self.llm.invoke(prompt.format(input_text=state["input_text"]))
-        
+        # Get normalization prompt and parser from ExtractionPrompts
+        prompt, parser = self.prompts.get_normalization_prompt_and_parser()
+        response = self.llm.invoke(prompt.format(input=state["input_text"]))
+
         try:
-            # Parse the normalization response
             normalized_data = parser.parse(response)
-            normalized_input = NormalizedInputOutput(**normalized_data.dict())
-            
-            logger.info(msgs["normalization_completed"])
-            
-            # Show quality warnings if needed
-            if normalized_input.completeness_score < 0.5:
-                logger.warning(msgs["incomplete_input_warning"])
-            
-            if normalized_input.completeness_score < 0.3:
-                logger.warning(msgs["low_quality_warning"])
-            
-            # Update the input_text with the normalized version for downstream processing
+            normalized_input = NormalizationOutput(**normalized_data.dict())
+            logger.info("Normalization completed.")
+
             updated_state = {
-                "normalized_input": normalized_input,
-                "input_text": normalized_input.normalized_text  # Use normalized text for all subsequent processing
+                "problem": normalized_input.problem,
+                "technical": normalized_input.technical,
+                "input_text": state["input_text"]
             }
-            
-            # Log only the normalized input text
-            logger.info(f"📝 Normalized input: {normalized_input.normalized_text}")
-            
-            logger.info(msgs["processing_complete"])
-            
+            logger.info(f"📝 Normalized problem: {normalized_input.problem}")
+            logger.info(f"📝 Normalized technical: {normalized_input.technical}")
             return updated_state
-            
+
         except Exception as e:
             logger.error(f"⚠️ Normalization parsing failed: {e}, using original input")
-            # Fallback: create basic normalized input if parsing fails
-            fallback_normalized = NormalizedInputOutput(
-                normalized_text=state["input_text"],
-                input_type="other",
-                language="unknown",
-                completeness_score=0.5,
-                technical_complexity="intermediate",
-                quality_notes="Normalization parsing failed, using original input"
+            fallback_normalized = NormalizationOutput(
+                problem="Not mentioned.",
+                technical="Not mentioned."
             )
-            
-            return {"normalized_input": fallback_normalized}
+            return {
+                "problem": "Not mentioned.",
+                "technical": "Not mentioned.",
+                "input_text": state["input_text"]
+            }
 
     def step0(self, state: ExtractionState) -> ExtractionState:
         """Initial step - pass through state"""
@@ -278,23 +268,20 @@ class CoreConceptExtractor:
 
     def step1_concept_extraction(self, state: ExtractionState) -> ExtractionState:
         """Step 1: Extract concept summary from document according to fields"""
-        # Use the normalized input text for concept extraction
-        input_text = state["input_text"]  # This is now the normalized text
-        
-        if not state["validation_feedback"]:
-            prompt, parser = self.prompts.get_phase1_prompt_and_parser()
-            response = self.llm.invoke(prompt.format(input_text=input_text))
-        else:
-            prompt, parser = self.prompts.get_phase1_prompt_and_parser()
-            response = self.llm.invoke(prompt.format(input_text=input_text))
+        # Use normalized problem for concept extraction if available
+        input_text = state.get("problem") if state.get("problem") else state["input_text"]
+        feedback = ""
+        if state.get("validation_feedback") and getattr(state["validation_feedback"], "feedback", None):
+            feedback = state["validation_feedback"].feedback
+
+        prompt, parser = self.prompts.get_phase1_prompt_and_parser()
+        response = self.llm.invoke(prompt.format(input_text=input_text, feedback=feedback))
         
         try:
-            # Use LangChain parser
             concept_data = parser.parse(response)
             concept_matrix = ConceptMatrix(**concept_data.dict())
         except Exception as e:
             logger.warning(f"Parser failed: {e}, falling back to manual parsing")
-            # Fallback parsing if structured parsing fails
             concept_matrix = self._parse_concept_response(response)
         
         return {"concept_matrix": concept_matrix}
@@ -302,13 +289,19 @@ class CoreConceptExtractor:
     def step2_keyword_generation(self, state: ExtractionState) -> ExtractionState:
         """Step 2: Generate main keywords for each field from summary"""
         concept_matrix = state["concept_matrix"]
-        
+        feedback = ""
+        if state.get("validation_feedback") and getattr(state["validation_feedback"], "feedback", None):
+            feedback = state["validation_feedback"].feedback
+
         prompt, parser = self.prompts.get_phase2_prompt_and_parser()
-        
-        response = self.llm.invoke(prompt.format(**concept_matrix.dict()))
+        response = self.llm.invoke(prompt.format(
+            problem_purpose=concept_matrix.problem_purpose,
+            object_system=concept_matrix.object_system,
+            environment_field=concept_matrix.environment_field,
+            feedback=feedback
+        ))
         
         try:
-            # Use LangChain parser
             keyword_data = parser.parse(response)
             seed_keywords = SeedKeywords(**keyword_data.dict())
         except Exception as e:
@@ -615,8 +608,13 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
         """Generate summary using prompt and parser"""
         prompt, parser = self.prompts.get_summary_prompt_and_parser()
         
+        # if state.get("problem") or state.get("technical"):
+        #     input_text = f"Problem: {state.get('problem', '')}\nTechnical: {state.get('technical', '')}"
+        #     response = self.llm.invoke(prompt.format(input_text=input_text))
+        # else:
+        #     response = self.llm.invoke(prompt.format(idea=state["input_text"]))
         response = self.llm.invoke(prompt.format(idea=state["input_text"]))
-        
+
         concept_data = parser.parse(response)
         
         return {"summary_text": concept_data}
@@ -629,20 +627,19 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
 
     def genQuery(self, state: ExtractionState) -> ExtractionState:
         """Generate search queries"""
-        summary = str(state["summary_text"])
-
         keys = state["seed_keywords"]
         problem_purpose_keys = str([i for key in keys.problem_purpose for i in state["final_keywords"][key]])
         object_system_keys = str([i for key in keys.object_system for i in state["final_keywords"][key]])
         environment_field_keys = str([i for key in keys.environment_field for i in state["final_keywords"][key]])
         fipc = str([i["category"] for i in state["ipcs"]])
+        problem = state.get("problem", "")
 
         prompt, parser = self.prompts.get_queries_prompt_and_parser()
         response = self.llm.invoke(prompt.format(
-            summary=summary, 
-            problem_purpose_keys=problem_purpose_keys, 
-            object_system_keys=object_system_keys, 
-            environment_field_keys=environment_field_keys, 
+            problem=problem,
+            problem_purpose_keys=problem_purpose_keys,
+            object_system_keys=object_system_keys,
+            environment_field_keys=environment_field_keys,
             CPC_CODES=fipc
         ))
 

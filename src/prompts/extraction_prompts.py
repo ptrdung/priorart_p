@@ -45,53 +45,40 @@ class QueriesResponse(BaseModel):
         description="List of queries. Leave empty if none."
     )
 
+class NormalizationOutput(BaseModel):
+    """Output model for normalization: extract problem and technical points from input"""
+    problem: str = Field(
+        description="The main problem or challenge described in the input idea."
+    )
+    technical: str = Field(
+        description="The core technical solution, method, or approach described in the input idea."
+    )
+
 class ExtractionPrompts:
     """Collection of prompt templates for patent keyword extraction"""
-    
+
     @staticmethod
-    def get_phase1_prompt_and_parser():
-        """Phase 1: Concept Matrix extraction prompt and parser"""
-        parser = PydanticOutputParser(pydantic_object=ConceptMatrixOutput)
-        
+    def get_normalization_prompt_and_parser():
+        """Prompt and parser for normalizing input and extracting problem/technical points"""
+        parser = PydanticOutputParser(pydantic_object=NormalizationOutput)
         prompt = PromptTemplate(
             template="""<OBJECTIVE_AND_PERSONA>
-You are a patent concept extraction specialist with extensive experience in identifying factual, structured insights from technical and patent-related documents for prior art search. Your task is to extract detailed, factual information for each component in the Concept Matrix from the provided document.
+You are a patent analyst specializing in technical idea normalization. Your task is to read the provided input and extract two main points:
+1. The main problem or challenge described.
+2. The core technical solution, method, or approach proposed.
 </OBJECTIVE_AND_PERSONA>
 
 <INSTRUCTIONS>
-To complete this task, you need to follow these steps:
-1. Carefully read and analyze the provided technical document
-2. Extract explicit information for each Concept Matrix component without making assumptions
-3. Use only information explicitly stated in the document
-4. If a component is missing or unspecified, respond exactly with: "Not mentioned."
-5. Ensure each component contains unique, non-redundant information
-6. Focus on domain-specific terminology as expressed in the document
+1. Carefully read the input idea.
+2. Identify and clearly state the main problem or challenge.
+3. Identify and clearly state the core technical solution, method, or approach.
+4. Use only explicit information from the input.
+5. If a point is missing, respond exactly with: "Not mentioned."
 </INSTRUCTIONS>
 
-<CONSTRAINTS>
-Dos:
-- Focus on clear, domain-specific terminology as expressed in the document
-- Each Concept Matrix component must contain unique, non-redundant information
-- Maintain factual precision appropriate for patent analysis
-- Use exact terminology found in the document
-- Exclude overly generic or unrelated content
-
-Don'ts:
-- Do not make assumptions, paraphrasing, or inference beyond what is explicitly stated
-- Do not repeat content between components
-- Do not infer technical details not explicitly described
-- Do not include generic terms without technical qualifiers
-</CONSTRAINTS>
-
 <CONTEXT>
-The document provided contains technical information about an invention or patent idea. You need to extract three key components that form the Concept Matrix for patent search:
-
-1. **Problem/Purpose** — The specific technical problem the invention addresses, or its primary objective
-2. **Object/System** — The main object, device, system, material, or process being described
-3. **Environment/Field** — The intended application domain, industry sector, or operational context
-
-Document:
-{input_text}
+Input idea:
+{input}
 </CONTEXT>
 
 <OUTPUT_FORMAT>
@@ -99,9 +86,56 @@ Document:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Extract factual information for each Concept Matrix component using only explicit information from the document. Maintain technical precision, avoid assumptions, and ensure each component contains unique information. IMPORTANT: Only generate the JSON output as defined - do not provide explanations, commentary, or any additional text beyond the required JSON format.
-</RECAP>""",
-            input_variables=["input_text"],
+Extract and return only the JSON output with two fields: "problem" and "technical". Do not add explanations or extra text.
+</RECAP>
+""",
+            input_variables=["input"],
+            partial_variables={"format_instructions": parser.get_format_instructions()}
+        )
+        return prompt, parser
+
+    @staticmethod
+    def get_phase1_prompt_and_parser():
+        """Phase 1: Concept Matrix extraction prompt and parser"""
+        parser = PydanticOutputParser(pydantic_object=ConceptMatrixOutput)
+        
+        prompt = PromptTemplate(
+            template="""<OBJECTIVE_AND_PERSONA>
+You are a patent concept extraction specialist skilled in identifying factual, structured insights from technical and patent documents for prior art search.
+</OBJECTIVE_AND_PERSONA>
+
+<INSTRUCTIONS>
+1. Read and analyze the "Document" and "Feedback" sections in full.
+2. For each Concept Matrix component, extract only explicit information verbatim—copy exact phrases as they appear; do not reword, summarize, or translate.
+3. Use only content directly stated in the Document or Feedback; ignore implications, assumptions, or cross-referenced knowledge not present in the provided text.
+4. For missing or unspecified components, respond exactly with: "Not mentioned."
+5. Ensure each component is unique and non-overlapping across the matrix; do not duplicate the same phrase in multiple components.
+</INSTRUCTIONS>
+
+<CONSTRAINTS>
+- Use only domain-specific terminology exactly as it appears in the provided text; no paraphrasing, synonyms, or normalization.
+- Each Concept Matrix component must be unique and non-redundant relative to all other components.
+- Do not repeat content between components.
+- Do not infer, generalize, or reconcile beyond explicit statements.
+</CONSTRAINTS>
+
+<CONTEXT>
+Document:
+{input_text}
+
+Feedback:
+{feedback}
+</CONTEXT>
+
+<OUTPUT_FORMAT>
+{format_instructions}
+</OUTPUT_FORMAT>
+
+<RECAP>
+Extract only explicit, unique, and technically precise information for each Concept Matrix component. Output strictly in the defined JSON format—no explanations, no extra text, and no code fences.
+</RECAP>
+""",
+            input_variables=["input_text", "feedback"],
             partial_variables={"format_instructions": parser.get_format_instructions()}
         )
         
@@ -114,105 +148,40 @@ Extract factual information for each Concept Matrix component using only explici
         
         prompt = PromptTemplate(
             template="""<OBJECTIVE_AND_PERSONA>
-You are an expert patent search analyst specializing in extracting high-value, domain-specific technical keywords for prior art search and patent landscaping. Your task is to extract precise, distinctive, and high-discriminative technical keywords from the provided Concept Matrix components.
+You are an expert patent search analyst. Your task is to extract domain-specific, high-value technical keywords from Concept Matrix components. The extracted keywords must maximize discriminative power, technical precision, and search relevance for prior art analysis.
 </OBJECTIVE_AND_PERSONA>
 
 <INSTRUCTIONS>
-To complete this task, you need to follow these steps:
-1. Analyze each component of the provided Concept Matrix
-2. Extract specific technical nouns and domain-specific industry terms
-3. Prioritize discriminative terms highly relevant for patent search
-4. Select the most technical and domain-preferred terms when multiple variants exist
-5. Ensure each keyword is technically precise and highly distinctive
-6. Create concise, unique lists for each component category
+1. Read each Concept Matrix component carefully.
+2. Extract only explicit technical nouns, industry terms, or formal nomenclature.
+3. Select discriminative terms that uniquely identify the technical solution or context.
+4. Each keyword must be concise: strictly 1–2 words only.
+5. Provide distinct, non-redundant keywords for each component.
 </INSTRUCTIONS>
 
 <CONSTRAINTS>
 Dos:
-- Focus exclusively on specific technical nouns (e.g., "optical sensor", "convolutional")
-- Keep each keyword concise: maximum 1-3 words per keyword
-- Include precise domain-specific industry terms
-- Prioritize discriminative terms that narrow down or uniquely identify technical solutions
-- Extract algorithm names, sensor types, material names, component names
-- Use formal technical nomenclature from the relevant industry
-- Prefer shorter, more precise terms over longer phrases
+- Use domain-specific terminology directly from the text.
+- Keep every keyword short: maximum 1–2 words.
+- Include algorithm names, sensor types, material names, or component names.
+- Ensure keywords are unique across components.
 
-Don'ts:
-- Do not include general terms like "system", "method", or "device" unless explicitly modified with technical qualifiers
-- Do not create keywords longer than 3 words
-- Do not infer or generalize terms beyond those explicitly mentioned
-- Do not include duplicate or synonymous terms across components
-- Do not use verbose keyphrases unless they represent formal technical nomenclature
-- Do not leave components populated if no relevant discriminative technical terms are available
+Don’ts:
+- Do not include generic words such as “system”, “method”, or “device” unless explicitly modified by technical qualifiers.
+- Do not create keywords longer than 3 words.
+- Do not infer or generalize terms beyond explicit mentions.
+- Do not duplicate or reuse keywords across components.
 </CONSTRAINTS>
 
 <CONTEXT>
-The following Concept Matrix has been extracted from a patent document:
+Concept Matrix extracted from patent document:
 
 - Problem/Purpose: {problem_purpose}
 - Object/System: {object_system}
 - Environment/Field: {environment_field}
 
-A discriminative term is one that narrows down or uniquely identifies a technical solution or context, making it highly valuable for patent search precision.
-</CONTEXT>
-
-<OUTPUT_FORMAT>
-{format_instructions}
-</OUTPUT_FORMAT>
-
-<RECAP>
-Extract precise, distinctive technical keywords from each Concept Matrix component. Focus on discriminative terms, avoid generic language, ensure uniqueness across categories, and prioritize technical precision for effective patent search. IMPORTANT: Only generate the JSON output as defined - do not provide explanations, commentary, or any additional text beyond the required JSON format.
-</RECAP>""",
-            input_variables=["problem_purpose", "object_system", "environment_field"],
-            partial_variables={"format_instructions": parser.get_format_instructions()}
-        )
-        
-        return prompt, parser
-    
-    @staticmethod
-    def get_phase3_prompt_and_parser():
-        """Phase 3: Keyword refinement with feedback prompt and parser"""
-        parser = PydanticOutputParser(pydantic_object=SeedKeywordsOutput)
-        
-        prompt = PromptTemplate(
-            template="""<OBJECTIVE_AND_PERSONA>
-You are a technical keyword optimization expert specializing in patent search and prior art analysis. Your task is to refine existing seed keywords based on user feedback to improve their technical specificity, discriminative power, and relevance for patent prior art search.
-</OBJECTIVE_AND_PERSONA>
-
-<INSTRUCTIONS>
-To complete this task, you need to follow these steps:
-1. Carefully review the current keywords and user feedback
-2. Identify and add any missing important technical terms explicitly mentioned in feedback
-3. Remove overly generic, vague, or non-technical terms from current keywords
-4. Ensure each keyword is technically precise and highly distinctive
-5. Eliminate duplicate or synonymous terms within and across categories
-6. Optimize the final keyword list for maximum discriminative value in patent search
-</INSTRUCTIONS>
-
-<CONSTRAINTS>
-Dos:
-- Prioritize technical terms such as algorithm names, sensor types, material names, component names
-- Keep each keyword concise: maximum 1-3 words per keyword
-- Focus on domain-specific terminology relevant to patent search
-- Ensure technical precision and high distinctiveness for each keyword
-- Focus only on Problem/Purpose, Object/System, and Environment/Field categories
-
-Don'ts:
-- Do not include terms that closely resemble or duplicate existing ones in meaning
-- Do not retain overly generic, vague, or non-technical terms
-- Do not ignore explicit technical terms mentioned in user feedback
-- Do not include synonymous terms across different categories
-- Do not compromise discriminative value for quantity
-</CONSTRAINTS>
-
-<CONTEXT>
-Current keywords that need refinement:
-{current_keywords}
-
-User feedback providing guidance for improvement:
+Feedback:
 {feedback}
-
-The goal is to optimize these keywords for maximum effectiveness in patent prior art search, ensuring each term contributes unique discriminative value.
 </CONTEXT>
 
 <OUTPUT_FORMAT>
@@ -220,9 +189,10 @@ The goal is to optimize these keywords for maximum effectiveness in patent prior
 </OUTPUT_FORMAT>
 
 <RECAP>
-Refine the seed keywords based on user feedback by adding missing technical terms, removing generic terms, ensuring technical precision, eliminating duplicates, and optimizing for maximum discriminative value in patent search. IMPORTANT: Only generate the JSON output as defined - do not provide explanations, commentary, or any additional text beyond the required JSON format.
-</RECAP>""",
-            input_variables=["current_keywords", "feedback"],
+Extract explicit, precise, discriminative keywords (1–2 words only) for each Concept Matrix component. Ensure uniqueness across components. Output strictly in the defined JSON format without explanations or extra text.
+</RECAP>
+""",
+            input_variables=["problem_purpose", "object_system", "environment_field", "feedback"],
             partial_variables={"format_instructions": parser.get_format_instructions()}
         )
         
@@ -293,55 +263,50 @@ Generate a concise technical summary (max 400 words) focusing on core technical 
         
         prompt = PromptTemplate(
             template="""<OBJECTIVE_AND_PERSONA>
-You are an expert patent searcher with many years of experience, proficient in using Boolean operators (AND, OR, NOT) and complex search syntax on databases like Google Patents. Your task is to build comprehensive yet concise patent search queries to assess novelty and inventive step for an invention.
+You are an expert prior art patent searcher with extensive experience in novelty and inventive-step assessment. Your role is to construct search queries that balance recall and precision, moving from broad coverage to highly discriminative targeting.
 </OBJECTIVE_AND_PERSONA>
 
 <INSTRUCTIONS>
-To complete this task, you need to follow these steps:
-1. Analyze the provided invention context and concept groups
-2. Review the CPC codes for classification context
-3. Select the most discriminative and essential keywords from each concept group
-4. Generate 6 concise search query strings following strategies from broad to narrow
-6. Apply the three specified search strategies with appropriate logic
-7. Ensure each query stays within optimal length limits for patent databases
+1. Carefully analyze the provided invention context and the three key concept groups.  
+2. Review CPC codes to understand the classification scope and leverage them to refine queries.  
+3. Extract the most technically discriminative and essential 2–3 keywords per concept group (use OR operator).  
+4. Construct exactly 6 concise. Two queries per strategy: Broad, Focused, Narrow.   
+5. Apply strict Boolean logic without paraphrasing or redundancy.  
+6. Use parentheses for clarity in OR combinations and to control operator precedence.  
+
 </INSTRUCTIONS>
 
 <CONSTRAINTS>
 Dos:
-- Use ONLY Boolean operators (AND, OR, NOT)
-- Select only 2-3 keywords per concept
-- Create queries compatible with multiple patent database platforms
-- Follow the three strategy approaches: Broad, Focused, and Narrow
-- Prioritize technical specificity over comprehensive keyword inclusion
-- Use abbreviated forms of long technical terms when appropriate
+- Use ONLY Boolean operators (AND, OR, NOT, parentheses).  
+- Limit to 8–10 unique keywords per query.  
+- Maintain strict technical specificity; prioritize discriminative terminology over breadth.  
+- Incorporate CPC codes directly into queries.   
 
 Don'ts:
-- Do not deviate from the three specified search strategies
-- Do not sacrifice technical precision for brevity
-- Do not ignore the CPC classification codes in query construction
-- Do not include overly generic terms that don't add discriminative value
+- Do not deviate from the three strategy categories (Broad, Focused, Narrow).  
+- Do not exceed keyword limits with verbose phrasing.  
+- Do not omit CPC codes when they are provided.  
+- Do not introduce generic or non-technical terms.  
+- Do not add commentary, explanations, or rephrasing of the invention context.  
+
 </CONSTRAINTS>
 
 <CONTEXT>
-Invention relates to: {summary}
+Invention relates to: {problem}
 
 Key Concept Groups:
-- Problem purpose: {problem_purpose_keys}
+- Problem purpose: {problem_purpose_keys}  
 - Object system: {object_system_keys}  
-- Environment field: {environment_field_keys}
+- Environment field: {environment_field_keys}  
 
 CPC (Cooperative Patent Classification) Codes:
-- Primary CPCs: {CPC_CODES}
+- Primary CPCs: {CPC_CODES}  
 
-QUERY CONSTRUCTION GUIDELINES:
-- Maximum keywords: 8-10 total terms per query
-- Prioritize most discriminative technical terms from each concept group
-- Use concise Boolean syntax: AND, OR, NOT ONLY
-- Combine CPC codes efficiently (use OR between related codes)
-
-Strategy 1 (Broad Query): Select 1-2 terms from each concept group + CPC codes.
-Strategy 2 (Focused Query): Select most specific term from each group + primary CPC. 
-Strategy 3 (Narrow Query): Use most specific terms from each group with strict AND logic for high precision.
+QUERY CONSTRUCTION STRATEGIES:
+- Strategy 1 (Broad Search): Use a wider combination of representative keywords and CPC codes to maximize coverage.  
+- Strategy 2 (Focused Search): Use more specific and discriminative terms with primary CPC codes to balance recall and precision.  
+- Strategy 3 (Narrow / Precision Search): Use only the most specific terms with strict AND logic and primary CPC codes for high precision.  
 </CONTEXT>
 
 <OUTPUT_FORMAT>
@@ -349,9 +314,10 @@ Strategy 3 (Narrow Query): Use most specific terms from each group with strict A
 </OUTPUT_FORMAT>
 
 <RECAP>
-Generate 6 comprehensive patent search queries using the three specified strategies (Broad, Focused, Narrow) with Boolean operators only (AND, OR, NOT). IMPORTANT: Only generate the JSON output as defined - do not provide explanations, commentary, or any additional text beyond the required JSON format.
-</RECAP>""",
-            input_variables=["summary", "problem_purpose_keys", "object_system_keys", "environment_field_keys", "CPC_CODES"],
+Output exactly 6 patent search queries in JSON format. Use only Boolean operators (AND, OR, NOT). No explanations, notes, or additional text.  
+</RECAP>
+""",
+            input_variables=["problem", "problem_purpose_keys", "object_system_keys", "environment_field_keys", "CPC_CODES"],
             partial_variables={"format_instructions": parser.get_format_instructions()}
         )
         
