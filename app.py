@@ -20,7 +20,7 @@ st.markdown(
 )
 
 st.title("Patent AI Tool")
-st.write("Nhập thông tin để trích xuất từ khóa sáng chế. Giao diện tối, đơn giản, dễ nhìn.")
+st.write("Nhập thông tin để trích xuất từ khóa sáng chế.")
 
 problem = st.text_area("Problem", placeholder="Nhập vấn đề kỹ thuật hoặc mục tiêu...", height=100)
 technical = st.text_area("Technical", placeholder="Nhập nội dung kỹ thuật hoặc bối cảnh...", height=100)
@@ -33,6 +33,10 @@ if "edit_data" not in st.session_state:
     st.session_state.edit_data = None
 if "feedback_text" not in st.session_state:
     st.session_state.feedback_text = ""
+if "confirmed" not in st.session_state:
+    st.session_state.confirmed = False
+if "related_keywords" not in st.session_state:
+    st.session_state.related_keywords = None
 
 if st.button("Extract Keywords"):
     if not problem and not technical:
@@ -46,8 +50,10 @@ if st.button("Extract Keywords"):
             st.session_state.keywords_action = None
             st.session_state.edit_data = None
             st.session_state.feedback_text = ""
+            st.session_state.confirmed = False
+            st.session_state.related_keywords = None
 
-if st.session_state.results:
+if st.session_state.results and not st.session_state.confirmed:
     st.markdown("### Kết quả trích xuất", unsafe_allow_html=True)
     st.markdown('<div class="result-box">', unsafe_allow_html=True)
     for key, value in st.session_state.results.items():
@@ -87,7 +93,7 @@ if st.session_state.results:
                 )
             st.session_state.edit_data = edit_data
 
-    if st.button("Gửi đánh giá"):
+    if st.button("Xác nhận đánh giá"):
         extractor = CoreConceptExtractor()
         seed_keywords = st.session_state.results.get("seed_keywords")
         concept_matrix = st.session_state.results.get("concept_matrix")
@@ -101,7 +107,6 @@ if st.session_state.results:
         elif st.session_state.keywords_action == "Từ chối":
             feedback = extractor.step3_human_evaluation(state, action="reject", feedback_text=st.session_state.feedback_text)
         elif st.session_state.keywords_action == "Chỉnh sửa":
-            # Parse edited keywords
             edited_data = {}
             for field in ["problem_purpose", "object_system", "environment_field"]:
                 raw = st.session_state.edit_data[field]
@@ -111,5 +116,24 @@ if st.session_state.results:
                 action="edit",
                 edited_keywords=SeedKeywords(**edited_data)
             )
-        st.success(f"Đã gửi đánh giá: {feedback['validation_feedback'].action}")
+        st.success(f"Đã xác nhận: {feedback['validation_feedback'].action}")
         st.session_state.results["validation_feedback"] = feedback["validation_feedback"]
+        st.session_state.confirmed = True
+
+if st.session_state.results and st.session_state.confirmed:
+    st.markdown("### Từ khoá liên quan")
+    extractor = CoreConceptExtractor()
+    seed_keywords = st.session_state.results.get("seed_keywords")
+    concept_matrix = st.session_state.results.get("concept_matrix")
+    state = {
+        "concept_matrix": concept_matrix,
+        "seed_keywords": seed_keywords,
+        "validation_feedback": st.session_state.results.get("validation_feedback")
+    }
+    related = extractor.gen_key(state)
+    st.session_state.related_keywords = related.get("final_keywords")
+    if st.session_state.related_keywords:
+        for key, value in st.session_state.related_keywords.items():
+            st.write(f"**{key}**:")
+            for v in value:
+                st.write(f"- {v}")

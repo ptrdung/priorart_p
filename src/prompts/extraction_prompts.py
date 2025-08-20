@@ -108,18 +108,22 @@ You are a patent concept extraction specialist skilled in identifying factual, s
 </OBJECTIVE_AND_PERSONA>
 
 <INSTRUCTIONS>
-1. Read and analyze the "Document" sections in full.
-2. For each Concept Matrix component, extract explicit information verbatim—copy exact phrases as they appear.
-3. Do not introduce new interpretations, synonyms, or background knowledge not directly present in the Document.
-4. Ensure each component is unique and non-overlapping across the matrix; do not duplicate the same phrase in multiple components.
+1. Read and analyze the "Document" section in full.
+2. For each Concept Matrix field below, extract all explicit, detailed information using exact terminology as stated in the document.
+3. Do not infer, generalize, or paraphrase. Only use explicit content from the document.
+4. Each field must be unique and non-overlapping; do not duplicate phrases across fields.
 </INSTRUCTIONS>
+
+<CONCEPT MATRIX FIELDS>
+1. Problem/Purpose — What specific technical problem does the invention address, or what is its primary objective, as explicitly stated in the document?
+2. Object/System — What is the main object, device, system, material, or process being described? Use the exact terminology found in the document.
+3. Environment/Field — What is the intended application domain, industry sector, or operational context where this invention is designed to be used?
 
 <CONSTRAINTS>
 - Use only domain-specific terminology and descriptive context exactly as stated in the provided text.
-- Explanations are allowed only if they are explicitly stated in the source (Document).
-- Each Concept Matrix component must be unique and non-redundant relative to all other components.
-- Do not repeat content between components.
 - Do not infer, generalize, or hallucinate beyond explicit statements.
+- Each Concept Matrix field must be unique and non-redundant relative to all other fields.
+- Do not repeat content between fields.
 </CONSTRAINTS>
 
 <CONTEXT>
@@ -132,8 +136,8 @@ Document:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Extract explicit terms and, where available, their directly stated descriptive context. Output strictly in the defined JSON format—no explanations, no extra text, and no code fences.
-</RECAP>ss
+Extract all explicit, detailed content for each Concept Matrix field using exact terminology from the document. Output strictly in the defined JSON format—no explanations, no extra text, and no code fences.
+</RECAP>
 """,
             input_variables=["input_text"],
             partial_variables={"format_instructions": parser.get_format_instructions()}
