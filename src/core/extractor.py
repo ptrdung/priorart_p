@@ -36,7 +36,7 @@ from ..crawling.patent_crawler import lay_thong_tin_patent
 from ..evaluation.similarity_evaluator import (
     eval_url, prompt, parse_idea_text, parse_idea_input, extract_user_info
 )
-import time
+
 # Set up Tavily API key
 os.environ["TAVILY_API_KEY"] = "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"
 
@@ -238,40 +238,59 @@ class CoreConceptExtractor:
         return {"seed_keywords": seed_keywords}
     
     def step3_human_evaluation(self, state: ExtractionState) -> ExtractionState:
-        """
-        Step 3: Human in the loop evaluation with three options (web/Streamlit integration).
-        If 'human_action' is not present in state, return UI data for confirmation.
-        If present, process feedback and continue.
-        """
+        """Step 3: Human in the loop evaluation with three options"""
+        # This method is now handled by Streamlit interface
+        # For CLI mode, fallback to original behavior
+        try:
+            # Check if we're in a Streamlit context
+            import streamlit as st
+            # If we're here, we're in Streamlit mode - skip CLI interaction
+            return state
+        except ImportError:
+            # CLI mode - use original implementation
+            return self._cli_human_evaluation(state)
+    
+    def _cli_human_evaluation(self, state: ExtractionState) -> ExtractionState:
+        """CLI version of human evaluation"""
+        msgs = self.validation_messages
+        
+        print("\n" + msgs["separator"])
+        print(msgs["final_evaluation_title"])
+        print(msgs["separator"])
+        
+        # Display final results
         concept_matrix = state["concept_matrix"]
         seed_keywords = state["seed_keywords"]
-
-        # If human_action is not provided, return data for UI to display and wait for user input
-        if "human_action" not in state or state["human_action"] is None:
-            state["ui_request"] = {
-                "concept_matrix": concept_matrix.dict() if concept_matrix else {},
-                "seed_keywords": seed_keywords.dict() if seed_keywords else {},
-                "actions": ["approve", "reject", "edit"],
-                "message": "Please review and confirm the extracted keywords."
-            }
-            state["awaiting_human"] = True
-            return state
-
-        # Process human action from UI
-        action = state["human_action"]
-        if action == "approve":
-            feedback = ValidationFeedback(action="approve")
-        elif action == "reject":
-            feedback = ValidationFeedback(action="reject", feedback=state.get("human_feedback", ""))
-        elif action == "edit":
-            feedback = ValidationFeedback(action="edit", edited_keywords=state.get("edited_keywords"))
-        else:
-            feedback = ValidationFeedback(action="approve")  # fallback
-
+        
+        print(msgs["concept_matrix_header"])
+        for field, value in concept_matrix.dict().items():
+            print(f"  • {field.replace('_', ' ').title()}: {value}")
+        
+        print(msgs["seed_keywords_header"])
+        for field, keywords in seed_keywords.dict().items():
+            print(f"  • {field.replace('_', ' ').title()}: {keywords}")
+        
+        print(msgs["divider"])
+        print(msgs["action_options"])
+        
+        # Get user action
+        while True:
+            action = input(msgs["action_prompt"]).lower().strip()
+            if action in ['1', 'approve', 'a']:
+                feedback = ValidationFeedback(action="approve")
+                break
+            elif action in ['2', 'reject', 'r']:
+                feedback_text = input(msgs["reject_feedback_prompt"])
+                feedback = ValidationFeedback(action="reject", feedback=feedback_text)
+                break
+            elif action in ['3', 'edit', 'e']:
+                feedback = self._get_manual_edits(seed_keywords)
+                break
+            else:
+                print(msgs["invalid_action"])
+        
         state["validation_feedback"] = feedback
-        state.pop("awaiting_human", None)
-        state.pop("ui_request", None)
-
+        
         return {"validation_feedback": feedback}
 
     def manual_editing(self, state: ExtractionState) -> ExtractionState:
@@ -513,7 +532,6 @@ class CoreConceptExtractor:
                             final_url.append(url)
                 except:
                     print(f"{query} is not found")
-            time.sleep(1)
 
         return {"final_url": final_url}
 
@@ -544,47 +562,3 @@ class CoreConceptExtractor:
             final_url.append(temp_score)
         
         return {"final_url": final_url}
-
-# --- STREAMLIT UI ---
-if __name__ == "__main__":
-    import streamlit as st
-
-    st.set_page_config(page_title="Patent Keyword Extractor", layout="centered")
-
-    st.markdown(
-        '''
-        <style>
-        body { background-color: #222; color: #fff; }
-        .stTextInput, .stTextArea, .stButton { background: #fff; color: #222; }
-        .stTextInput input, .stTextArea textarea { background: #fff; color: #222; }
-        .stButton button { background: #007bff; color: #fff; border-radius: 4px; }
-        </style>
-        ''',
-        unsafe_allow_html=True,
-    )
-
-    st.title("Patent Keyword Extraction Tool")
-
-    with st.form("input_form"):
-        problem = st.text_area("Problem", placeholder="Nhập problem...", height=100)
-        technical = st.text_area("Technical", placeholder="Nhập technical...", height=100)
-        submitted = st.form_submit_button("Extract")
-
-    if submitted and problem and technical:
-        extractor = CoreConceptExtractor()
-        input_text = f"Problem: {problem}\nTechnical: {technical}"
-        result = extractor.extract_keywords(input_text)
-        st.subheader("Concept Matrix")
-        st.json(result.get("concept_matrix", {}))
-        st.subheader("Seed Keywords")
-        st.json(result.get("seed_keywords", {}))
-        st.subheader("Final Keywords")
-        st.json(result.get("final_keywords", {}))
-        st.subheader("Summary")
-        st.write(result.get("summary_text", ""))
-        st.subheader("IPCs")
-        st.write(result.get("ipcs", ""))
-        st.subheader("Queries")
-        st.write(result.get("queries", ""))
-        st.subheader("Final URLs")
-        st.write(result.get("final_url", ""))
