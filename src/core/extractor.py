@@ -327,6 +327,9 @@ class CoreConceptExtractor:
             elif action in ['2', 'reject', 'r']:
                 feedback_text = input(msgs["reject_feedback_prompt"])
                 feedback = ValidationFeedback(action="reject", feedback=feedback_text)
+                # Clear concept_matrix and seed_keywords to force regeneration
+                state["concept_matrix"] = None
+                state["seed_keywords"] = None
                 break
             elif action in ['3', 'edit', 'e']:
                 feedback = self._get_manual_edits(seed_keywords)
