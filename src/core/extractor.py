@@ -29,6 +29,7 @@ from langchain_tavily import TavilySearch
 from langchain.prompts import PromptTemplate
 from langchain_core.prompts import ChatPromptTemplate
 import requests
+import time
 
 # Configure logging
 log_filename = f"patent_extractor_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
@@ -612,7 +613,7 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
                     logger.warning(f"❌ No results found for query: {query}")
             else:
                 logger.error(f"❌ Search API request failed for query: {query} (status: {response.status_code})")
-
+            time.sleep(1)  # Rate limit to avoid hitting API limits
         logger.info(f"🔗 Found {len(final_url)} URLs from search results")
         return {"final_url": final_url}
 
