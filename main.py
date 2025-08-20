@@ -38,33 +38,38 @@ def main():
         print("\n✅ Extraction completed!")
         print("\n📊 Results Summary:")
         print("-" * 40)
-        
-        if results["concept_matrix"]:
-            print("\n🎯 Concept Matrix:")
-            for key, value in results["concept_matrix"].items():
-                print(f"  • {key.replace('_', ' ').title()}: {value}")
-        
-        if results["seed_keywords"]:
-            print("\n🔑 Seed Keywords:")
-            for key, keywords in results["seed_keywords"].dict().items():
-                print(f"  • {key.replace('_', ' ').title()}: {keywords}")
-        
-        if results["final_keywords"]:
-            print("\n🎨 Enhanced Keywords:")
-            for key, synonyms in results["final_keywords"].items():
-                print(f"  • {key}: {synonyms}")
-        
-        if results["queries"]:
-            print("\n🔍 Generated Queries:")
-            for i, query in enumerate(results["queries"].queries, 1):
-                print(f"  {i}. {query}")
-        
-        if results["final_url"]:
-            print(f"\n🌐 Found {len(results['final_url'])} relevant patents")
-            for i, url_data in enumerate(results["final_url"][:3], 1):
-                print(f"  {i}. {url_data.get('url', 'N/A')} (Score: {url_data.get('user_scenario', 0):.2f})")
-        
-        print(f"\n🎬 User Action: {results.get('user_action', 'N/A')}")
+
+        # Print all ExtractionState fields for full transparency
+        for key, value in results.items():
+            if value is None:
+                continue
+            print(f"\n🔹 {key}:")
+            if hasattr(value, "dict"):
+                for subkey, subval in value.dict().items():
+                    print(f"  • {subkey.replace('_', ' ').title()}: {subval}")
+            elif isinstance(value, dict):
+                for subkey, subval in value.items():
+                    print(f"  • {subkey}: {subval}")
+            elif isinstance(value, list):
+                for i, item in enumerate(value, 1):
+                    if isinstance(item, dict):
+                        print(f"  {i}. " + ", ".join([f"{k}: {v}" for k, v in item.items()]))
+                    else:
+                        print(f"  {i}. {item}")
+            else:
+                print(f"  {value}")
+
+        # Save results to JSON file
+        import json
+        import datetime
+        filename = f"extraction_results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(filename, "w", encoding="utf-8") as f:
+            def serialize(obj):
+                if hasattr(obj, "dict"):
+                    return obj.dict()
+                return obj
+            json.dump({k: serialize(v) for k, v in results.items()}, f, indent=2, ensure_ascii=False)
+        print(f"\n💾 Results saved to {filename}")
         
     except KeyboardInterrupt:
         print("\n\n⚠️ Process interrupted by user")

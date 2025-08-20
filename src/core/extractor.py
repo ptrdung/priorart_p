@@ -31,11 +31,12 @@ from langchain_core.prompts import ChatPromptTemplate
 import requests
 
 # Configure logging
+log_filename = f"patent_extractor_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('patent_extractor.log'),
+        logging.FileHandler(log_filename),
         logging.StreamHandler()
     ]
 )
@@ -158,7 +159,6 @@ class CoreConceptExtractor:
         workflow.add_node("step2_keyword_generation", self.step2_keyword_generation)
         workflow.add_node("step3_human_evaluation", self.step3_human_evaluation)
         workflow.add_node("manual_editing", self.manual_editing)
-        workflow.add_node("export_results", self.export_results)
         workflow.add_node("gen_key", self.gen_key)
         workflow.add_node("summary_prompt_and_parser", self.summary_prompt_and_parser)
         workflow.add_node("call_ipcs_api", self.call_ipcs_api)
@@ -198,6 +198,8 @@ class CoreConceptExtractor:
         """Run the simplified 3-step keyword extraction workflow"""
         initial_state = ExtractionState(
             input_text=input_text,
+            problem=None,
+            technical=None,
             concept_matrix=None,
             seed_keywords=None,
             validation_feedback=None,
@@ -209,23 +211,13 @@ class CoreConceptExtractor:
         )
         
         if self.use_checkpointer:
-            # Configuration for LangGraph with checkpointer
             config = {"configurable": {"thread_id": settings.THREAD_ID}}
             result = self.graph.invoke(initial_state, config)
         else:
-            # Simple invocation without checkpointer
             result = self.graph.invoke(initial_state)
         
-        return {
-            "seed_keywords": result["seed_keywords"] if result["seed_keywords"] else None,
-            "final_keywords": result["final_keywords"] if result["final_keywords"] else None,
-            "concept_matrix": result["concept_matrix"].dict() if result["concept_matrix"] else None,
-            "user_action": result.get("validation_feedback", {}).action if result.get("validation_feedback") else None,
-            "summary_text": result["summary_text"] if result["summary_text"] else None,
-            "ipcs": result["ipcs"] if result["ipcs"] else None,
-            "queries": result["queries"] if result["queries"] else None,
-            "final_url": result["final_url"] if result["final_url"] else None
-        }
+        # Return all ExtractionState fields
+        return dict(result)
         
     def input_normalization(self, state: ExtractionState) -> ExtractionState:
         """Normalize and clean input text before processing"""    
@@ -354,37 +346,6 @@ class CoreConceptExtractor:
             state["seed_keywords"] = feedback.edited_keywords
         
         return {"seed_keywords": feedback.edited_keywords}
-    
-    def export_results(self, state: ExtractionState) -> ExtractionState:
-        """Export final results to JSON file"""
-        seed_keywords = state["seed_keywords"]
-        concept_matrix = state["concept_matrix"]
-        final_keywords = state["final_keywords"]
-        
-        # Create results dictionary
-        results = {
-            "timestamp": datetime.datetime.now().isoformat(),
-            "concept_matrix": concept_matrix.dict() if concept_matrix else None,
-            "seed_keywords": seed_keywords.dict() if seed_keywords else None,
-            "final_keywords": final_keywords if final_keywords else None,
-        }
-        
-        # Generate filename
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"patent_keywords_{timestamp}.json"
-        
-        # Export to JSON
-        try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(results, f, indent=2, ensure_ascii=False)
-            
-            logger.info(f"✅ Results exported to {filename}")
-        except Exception as e:
-            logger.error(f"❌ Export failed: {str(e)}")
-        
-        state["current_phase"] = "completed"
-        
-        return state
     
     def _get_manual_edits(self, current_keywords: SeedKeywords) -> ValidationFeedback:
         """Get manual edits from user"""
