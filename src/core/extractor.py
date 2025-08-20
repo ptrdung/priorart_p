@@ -9,6 +9,8 @@ import os
 import logging
 from typing import Any, Dict, List, Literal, Optional, cast
 
+import streamlit as st
+
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
@@ -121,11 +123,11 @@ class ExtractionState(TypedDict):
 
 class CoreConceptExtractor:
     """Patent seed keyword extraction system"""
-    
+
     def __init__(self, model_name: str = None, use_checkpointer: bool = None):
         """
         Initialize the CoreConceptExtractor.
-        
+
         Args:
             model_name: Name of the LLM model to use
             use_checkpointer: Whether to use checkpointer for graph state
@@ -133,7 +135,7 @@ class CoreConceptExtractor:
         # Use settings from config file with fallback to parameters
         self.model_name = model_name if model_name is not None else settings.DEFAULT_MODEL_NAME
         self.use_checkpointer = use_checkpointer if use_checkpointer is not None else settings.USE_CHECKPOINTER
-        
+
         self.llm = Ollama(model=self.model_name, temperature=settings.MODEL_TEMPERATURE)
         self.tavily_search = TavilySearch(
             max_results=settings.MAX_SEARCH_RESULTS,
@@ -148,7 +150,43 @@ class CoreConceptExtractor:
         self.validation_messages = ExtractionPrompts.get_validation_messages()
         self.use_checkpointer = use_checkpointer
         self.graph = self._build_graph()
-    
+
+    def streamlit_ui(self):
+        st.set_page_config(page_title="Patent Concept Extractor", layout="centered")
+        st.markdown(
+            """
+            <style>
+            body, .stApp {
+                background-color: #222;
+                color: #fff;
+            }
+            .stTextInput>div>div>input {
+                background-color: #333;
+                color: #fff;
+                border: 1px solid #fff;
+            }
+            .stButton>button {
+                background-color: #fff;
+                color: #222;
+                border: none;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.title("Patent Concept Extractor")
+        st.write("Nhập thông tin để trích xuất ý tưởng sáng chế.")
+
+        problem = st.text_area("Problem", "", help="Nhập vấn đề kỹ thuật hoặc mục tiêu.")
+        technical = st.text_area("Technical", "", help="Nhập nội dung kỹ thuật hoặc bối cảnh.")
+
+        if st.button("Extract"):
+            input_text = f"Problem: {problem}\nTechnical: {technical}"
+            with st.spinner("Đang xử lý..."):
+                result = self.extract_keywords(input_text)
+            st.subheader("Kết quả trích xuất")
+            st.json(result)
+
     def _build_graph(self) -> StateGraph:
         """Build simplified LangGraph workflow"""
         workflow = StateGraph(ExtractionState)
