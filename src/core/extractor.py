@@ -239,19 +239,6 @@ class CoreConceptExtractor:
     
     def step3_human_evaluation(self, state: ExtractionState) -> ExtractionState:
         """Step 3: Human in the loop evaluation with three options"""
-        # This method is now handled by Streamlit interface
-        # For CLI mode, fallback to original behavior
-        try:
-            # Check if we're in a Streamlit context
-            import streamlit as st
-            # If we're here, we're in Streamlit mode - skip CLI interaction
-            return state
-        except ImportError:
-            # CLI mode - use original implementation
-            return self._cli_human_evaluation(state)
-    
-    def _cli_human_evaluation(self, state: ExtractionState) -> ExtractionState:
-        """CLI version of human evaluation"""
         msgs = self.validation_messages
         
         print("\n" + msgs["separator"])
