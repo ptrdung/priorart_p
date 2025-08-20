@@ -14,7 +14,7 @@ class Settings:
     BRAVE_API_KEY = os.getenv("BRAVE_API_KEY", "BSAQlxb-jIHFbW1mK0_S4zlTqfkuA3Z")
     
     # Model Configuration
-    DEFAULT_MODEL_NAME = "qwen3:4b"
+    DEFAULT_MODEL_NAME = "qwen2.5:14b-instruct"
     MODEL_TEMPERATURE = 0.7
     
     # Search Configuration

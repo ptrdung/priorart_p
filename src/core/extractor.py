@@ -228,10 +228,7 @@ class CoreConceptExtractor:
         }
         
     def input_normalization(self, state: ExtractionState) -> ExtractionState:
-        """Normalize and clean input text before processing"""
-        msgs = self.normalization_messages
-        logger.info(msgs["normalization_started"])
-        
+        """Normalize and clean input text before processing"""    
         # Get normalization prompt and parser from ExtractionPrompts
         prompt, parser = self.prompts.get_normalization_prompt_and_parser()
         response = self.llm.invoke(prompt.format(input=state["input_text"]))
@@ -269,13 +266,9 @@ class CoreConceptExtractor:
     def step1_concept_extraction(self, state: ExtractionState) -> ExtractionState:
         """Step 1: Extract concept summary from document according to fields"""
         # Use normalized problem for concept extraction if available
-        input_text = state.get("problem") if state.get("problem") else state["input_text"]
-        feedback = ""
-        if state.get("validation_feedback") and getattr(state["validation_feedback"], "feedback", None):
-            feedback = state["validation_feedback"].feedback
 
         prompt, parser = self.prompts.get_phase1_prompt_and_parser()
-        response = self.llm.invoke(prompt.format(input_text=input_text, feedback=feedback))
+        response = self.llm.invoke(prompt.format(problem=state["problem"]))
         
         try:
             concept_data = parser.parse(response)

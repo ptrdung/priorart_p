@@ -66,14 +66,17 @@ class ExtractionPrompts:
 You are a patent analyst specializing in technical idea normalization. Your task is to read the provided input and extract two main points:
 1. The main problem or challenge described.
 2. The core technical solution, method, or approach proposed.
+Your extraction must be as detailed and specific as possible, capturing all explicit technical details, constraints, and context present in the input.
 </OBJECTIVE_AND_PERSONA>
 
 <INSTRUCTIONS>
-1. Carefully read the input idea.
-2. Identify and clearly state the main problem or challenge.
-3. Identify and clearly state the core technical solution, method, or approach.
-4. Use only explicit information from the input.
+1. Carefully read the input idea in full.
+2. Identify and clearly state the main problem or challenge, including any technical constraints, requirements, or context explicitly mentioned.
+3. Identify and clearly state the core technical solution, method, or approach, including all relevant technical details, mechanisms, steps, and context provided.
+4. Use only explicit information from the input; do not infer, generalize, or paraphrase.
 5. If a point is missing, respond exactly with: "Not mentioned."
+6. If multiple explicit details are present, include all of them in a concise, structured manner.
+7. Prefer direct quotations or closely paraphrased phrases from the input for maximum fidelity.
 </INSTRUCTIONS>
 
 <CONTEXT>
@@ -86,7 +89,7 @@ Input idea:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Extract and return only the JSON output with two fields: "problem" and "technical". Do not add explanations or extra text.
+Extract and return only the JSON output with two fields: "problem" and "technical". Each field should be as detailed as possible, capturing all explicit technical details and context from the input. Do not add explanations or extra text.
 </RECAP>
 """,
             input_variables=["input"],
@@ -105,26 +108,23 @@ You are a patent concept extraction specialist skilled in identifying factual, s
 </OBJECTIVE_AND_PERSONA>
 
 <INSTRUCTIONS>
-1. Read and analyze the "Document" and "Feedback" sections in full.
-2. For each Concept Matrix component, extract only explicit information verbatim—copy exact phrases as they appear; do not reword, summarize, or translate.
-3. Use only content directly stated in the Document or Feedback; ignore implications, assumptions, or cross-referenced knowledge not present in the provided text.
-4. For missing or unspecified components, respond exactly with: "Not mentioned."
-5. Ensure each component is unique and non-overlapping across the matrix; do not duplicate the same phrase in multiple components.
+1. Read and analyze the "Document" sections in full.
+2. For each Concept Matrix component, extract explicit information verbatim—copy exact phrases as they appear.
+3. Do not introduce new interpretations, synonyms, or background knowledge not directly present in the Document.
+4. Ensure each component is unique and non-overlapping across the matrix; do not duplicate the same phrase in multiple components.
 </INSTRUCTIONS>
 
 <CONSTRAINTS>
-- Use only domain-specific terminology exactly as it appears in the provided text; no paraphrasing, synonyms, or normalization.
+- Use only domain-specific terminology and descriptive context exactly as stated in the provided text.
+- Explanations are allowed only if they are explicitly stated in the source (Document).
 - Each Concept Matrix component must be unique and non-redundant relative to all other components.
 - Do not repeat content between components.
-- Do not infer, generalize, or reconcile beyond explicit statements.
+- Do not infer, generalize, or hallucinate beyond explicit statements.
 </CONSTRAINTS>
 
 <CONTEXT>
 Document:
-{input_text}
-
-Feedback:
-{feedback}
+{problem}
 </CONTEXT>
 
 <OUTPUT_FORMAT>
@@ -132,10 +132,10 @@ Feedback:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Extract only explicit, unique, and technically precise information for each Concept Matrix component. Output strictly in the defined JSON format—no explanations, no extra text, and no code fences.
-</RECAP>
+Extract explicit terms and, where available, their directly stated descriptive context. Output strictly in the defined JSON format—no explanations, no extra text, and no code fences.
+</RECAP>ss
 """,
-            input_variables=["input_text", "feedback"],
+            input_variables=["input_text"],
             partial_variables={"format_instructions": parser.get_format_instructions()}
         )
         
