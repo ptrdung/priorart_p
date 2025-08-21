@@ -197,7 +197,20 @@ class CoreConceptExtractor:
     def extract_keywords(self, input_text: str, continue_from_state: Dict = None, action: str = None) -> Dict:
         """Run the patent extraction workflow with optional continuation based on user action"""
         if continue_from_state:
-            # Convert dictionary to ExtractionState if needed
+            # Convert state to dict format
+            state = {
+                "input_text": input_text,
+                "problem": continue_from_state.get("problem"),
+                "technical": continue_from_state.get("technical"),
+                "summary_text": continue_from_state.get("summary_text"),
+                "ipcs": continue_from_state.get("ipcs"),
+                "concept_matrix": continue_from_state.get("concept_matrix"),
+                "seed_keywords": continue_from_state.get("seed_keywords"),
+                "validation_feedback": continue_from_state.get("validation_feedback"),
+                "final_keywords": continue_from_state.get("final_keywords"),
+                "queries": continue_from_state.get("queries"),
+                "final_url": continue_from_state.get("final_url")
+            }
             state = continue_from_state if isinstance(continue_from_state, ExtractionState) else ExtractionState(**continue_from_state)
             
             if action == "reject":
@@ -267,7 +280,7 @@ class CoreConceptExtractor:
         
         return dict(result)
 
-    def _regenerate_keywords(self, state: ExtractionState) -> Dict:
+    def _regenerate_keywords(self, state: Dict) -> Dict:
         """Regenerate keywords from the existing concept matrix"""
         workflow = StateGraph(ExtractionState)
         
@@ -277,13 +290,17 @@ class CoreConceptExtractor:
         
         # Compile and run
         regen_graph = workflow.compile()
-        result = regen_graph.invoke(state)
-        
-        # Merge results back into the state
-        state.update(result)
-        return dict(state)
+        try:
+            result = regen_graph.invoke(state)
+            new_state = state.copy()
+            new_state.update(dict(result))
+            return new_state
+        except Exception as e:
+            logger.error(f"Error in regenerate_keywords: {e}")
+            # Return original state if there's an error
+            return state
 
-    def _continue_with_approved_keywords(self, state: ExtractionState) -> Dict:
+    def _continue_with_approved_keywords(self, state: Dict) -> Dict:
         """Continue processing with approved keywords"""
         workflow = StateGraph(ExtractionState)
         
@@ -301,9 +318,13 @@ class CoreConceptExtractor:
 
         # Compile and run
         continue_graph = workflow.compile()
-        result = continue_graph.invoke(state)
-        
-        return dict(result)
+        try:
+            result = continue_graph.invoke(state)
+            return dict(result)
+        except Exception as e:
+            logger.error(f"Error in continue_with_approved_keywords: {e}")
+            # Return original state if there's an error
+            return state
         
     def input_normalization(self, state: ExtractionState) -> ExtractionState:
         """Normalize and clean input text before processing"""    

@@ -202,8 +202,8 @@ def main():
                                 "edited_keywords": None
                             }
                             
-                            # Cập nhật state hiện tại với feedback
-                            current_state = st.session_state.current_state.copy()
+                            # Chuyển state hiện tại thành dict để xử lý
+                            current_state = dict(st.session_state.current_state)
                             current_state["validation_feedback"] = validation_feedback
                             
                             st.info("Đang tiếp tục xử lý với từ khóa đã chấp nhận...")
@@ -217,7 +217,7 @@ def main():
                                 )
                                 
                                 # Cập nhật session state
-                                st.session_state.current_state = results
+                                st.session_state.current_state = dict(results)
                                 st.session_state.validation_feedback = validation_feedback
                                 st.session_state.phase = "completed"
                                 st.experimental_rerun()
