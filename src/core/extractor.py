@@ -194,8 +194,8 @@ class CoreConceptExtractor:
 
         return workflow.compile()
     
-    def extract_keywords(self, input_text: str) -> Dict:
-        """Run the simplified 3-step keyword extraction workflow"""
+    def run_until_keywords(self, input_text: str) -> Dict:
+        """Run the workflow until keyword generation and stop for user input"""
         initial_state = ExtractionState(
             input_text=input_text,
             problem=None,
@@ -209,14 +209,74 @@ class CoreConceptExtractor:
             queries=None,
             final_url=None
         )
+
+        # Create a subgraph that runs only until keyword generation
+        keyword_workflow = StateGraph(ExtractionState)
         
+        # Add nodes for initial steps
+        keyword_workflow.add_node("input_normalization", self.input_normalization)
+        keyword_workflow.add_node("step0", self.step0)
+        keyword_workflow.add_node("step1_concept_extraction", self.step1_concept_extraction)
+        keyword_workflow.add_node("step2_keyword_generation", self.step2_keyword_generation)
+        keyword_workflow.add_node("summary_prompt_and_parser", self.summary_prompt_and_parser)
+        keyword_workflow.add_node("call_ipcs_api", self.call_ipcs_api)
+
+        # Define flow until keyword generation
+        keyword_workflow.set_entry_point("input_normalization")
+        keyword_workflow.add_edge("input_normalization", "step0")
+        keyword_workflow.add_edge("step0", "step1_concept_extraction")
+        keyword_workflow.add_edge("step0", "summary_prompt_and_parser")
+        keyword_workflow.add_edge("step1_concept_extraction", "step2_keyword_generation")
+        keyword_workflow.add_edge("summary_prompt_and_parser", "call_ipcs_api")
+
+        # Run the initial part of the workflow
         if self.use_checkpointer:
             config = {"configurable": {"thread_id": settings.THREAD_ID}}
-            result = self.graph.invoke(initial_state, config)
+            result = keyword_workflow.compile().invoke(initial_state, config)
         else:
-            result = self.graph.invoke(initial_state)
+            result = keyword_workflow.compile().invoke(initial_state)
+
+        return dict(result)
+
+    def complete_pipeline(self, state: Dict) -> Dict:
+        """Complete the pipeline after user feedback"""
+        # Create a subgraph for remaining steps
+        completion_workflow = StateGraph(ExtractionState)
         
-        # Return all ExtractionState fields
+        # Add nodes for remaining steps
+        completion_workflow.add_node("step3_human_evaluation", self.step3_human_evaluation)
+        completion_workflow.add_node("manual_editing", self.manual_editing)
+        completion_workflow.add_node("gen_key", self.gen_key)
+        completion_workflow.add_node("genQuery", self.genQuery)
+        completion_workflow.add_node("genUrl", self.genUrl)
+        completion_workflow.add_node("evalUrl", self.evalUrl)
+
+        # Define flow for remaining steps
+        completion_workflow.set_entry_point("step3_human_evaluation")
+        
+        # Add conditional edges based on human evaluation
+        completion_workflow.add_conditional_edges(
+            "step3_human_evaluation",
+            self._get_human_action,
+            {
+                "approve": "gen_key",
+                "reject": END,  # End here if rejected
+                "edit": "manual_editing"
+            }
+        )
+        
+        completion_workflow.add_edge("manual_editing", "gen_key")
+        completion_workflow.add_edge("gen_key", "genQuery")
+        completion_workflow.add_edge("genQuery", "genUrl")
+        completion_workflow.add_edge("genUrl", "evalUrl")
+
+        # Run the completion part of the workflow
+        if self.use_checkpointer:
+            config = {"configurable": {"thread_id": settings.THREAD_ID}}
+            result = completion_workflow.compile().invoke(state, config)
+        else:
+            result = completion_workflow.compile().invoke(state)
+
         return dict(result)
         
     def input_normalization(self, state: ExtractionState) -> ExtractionState:
@@ -297,77 +357,23 @@ class CoreConceptExtractor:
     
     def step3_human_evaluation(self, state: ExtractionState) -> ExtractionState:
         """Step 3: Human in the loop evaluation with three options"""
-        msgs = self.validation_messages
+        # Just return the current state - the web interface will handle the interaction
+        if not state.get("validation_feedback"):
+            # If no feedback yet, return current state for web interface to handle
+            return state
         
-        print("\n" + msgs["separator"])
-        print(msgs["final_evaluation_title"])
-        print(msgs["separator"])
-        
-        # Display final results
-        concept_matrix = state["concept_matrix"]
-        seed_keywords = state["seed_keywords"]
-        
-        print(msgs["concept_matrix_header"])
-        for field, value in concept_matrix.dict().items():
-            print(f"  • {field.replace('_', ' ').title()}: {value}")
-        
-        print(msgs["seed_keywords_header"])
-        for field, keywords in seed_keywords.dict().items():
-            print(f"  • {field.replace('_', ' ').title()}: {keywords}")
-        
-        print(msgs["divider"])
-        print(msgs["action_options"])
-        
-        # Get user action
-        while True:
-            action = input(msgs["action_prompt"]).lower().strip()
-            if action in ['1', 'approve', 'a']:
-                feedback = ValidationFeedback(action="approve")
-                break
-            elif action in ['2', 'reject', 'r']:
-                feedback_text = input(msgs["reject_feedback_prompt"])
-                feedback = ValidationFeedback(action="reject", feedback=feedback_text)
-                break
-            elif action in ['3', 'edit', 'e']:
-                feedback = self._get_manual_edits(seed_keywords)
-                break
-            else:
-                print(msgs["invalid_action"])
-        
-        state["validation_feedback"] = feedback
-        
-        return {"validation_feedback": feedback}
+        # If we have feedback (from web interface), use it
+        return {"validation_feedback": state["validation_feedback"]}
 
     def manual_editing(self, state: ExtractionState) -> ExtractionState:
         """Allow user to manually edit keywords"""
         feedback = state["validation_feedback"]
         
-        if feedback.edited_keywords:
-            state["seed_keywords"] = feedback.edited_keywords
+        if feedback and feedback.edited_keywords:
+            return {"seed_keywords": feedback.edited_keywords}
         
-        return {"seed_keywords": feedback.edited_keywords}
-    
-    def _get_manual_edits(self, current_keywords: SeedKeywords) -> ValidationFeedback:
-        """Get manual edits from user"""
-        logger.info("📝 Manual Editing Mode")
-        print("\n📝 Manual Editing Mode")
-        print("Current keywords will be displayed. Press Enter to keep current value, or type new keywords separated by commas.")
-        
-        edited_data = {}
-        
-        for field, keywords in current_keywords.dict().items():
-            field_name = field.replace('_', ' ').title()
-            current_str = ", ".join(keywords)
-            print(f"\n{field_name}: [{current_str}]")
-            
-            new_input = input(f"New {field_name} (or Enter to keep): ").strip()
-            if new_input:
-                edited_data[field] = [kw.strip() for kw in new_input.split(',') if kw.strip()]
-            else:
-                edited_data[field] = keywords
-        
-        edited_keywords = SeedKeywords(**edited_data)
-        return ValidationFeedback(action="edit", edited_keywords=edited_keywords)
+        # If no edited keywords in feedback, return original state
+        return state
       
     def _parse_concept_response(self, response: str) -> ConceptMatrix:
         """Parse response when JSON parsing fails"""

@@ -70,15 +70,21 @@ def main():
                     "queries": None,
                     "final_url": None
                 }
-                st.experimental_rerun()
+                st.rerun()
 
     # Process the input and show results
     if st.session_state.processing:
         if not st.session_state.waiting_for_input:
-            st.session_state.current_state = st.session_state.extractor.extract_keywords(
+            # First run - go until we get keywords
+            st.session_state.current_state = st.session_state.extractor.run_until_keywords(
                 st.session_state.current_state["input_text"]
             )
             st.session_state.waiting_for_input = True
+        elif st.session_state.current_state.get("validation_feedback"):
+            # After user action, complete the pipeline
+            st.session_state.current_state = st.session_state.extractor.complete_pipeline(
+                st.session_state.current_state
+            )
 
         if st.session_state.current_state.get("concept_matrix"):
             display_concept_matrix(st.session_state.current_state["concept_matrix"])
@@ -94,13 +100,13 @@ def main():
                 if st.button("✅ Approve"):
                     st.session_state.current_state["validation_feedback"] = {"action": "approve"}
                     st.session_state.waiting_for_input = False
-                    st.experimental_rerun()
+                    st.rerun()
 
             with col2:
                 if st.button("🔄 Reject"):
                     st.session_state.current_state["validation_feedback"] = {"action": "reject"}
                     st.session_state.waiting_for_input = False
-                    st.experimental_rerun()
+                    st.rerun()
 
             with col3:
                 if st.button("✏️ Edit"):
@@ -128,7 +134,7 @@ def main():
                     st.session_state.current_state["validation_feedback"] = {"action": "edit"}
                     st.session_state.editing = False
                     st.session_state.waiting_for_input = False
-                    st.experimental_rerun()
+                    st.rerun()
 
         # Display final results if available
         if st.session_state.current_state.get("final_url"):
@@ -141,7 +147,7 @@ def main():
                 st.session_state.current_state = None
                 st.session_state.waiting_for_input = False
                 st.session_state.editing = False
-                st.experimental_rerun()
+                st.rerun()
 
 if __name__ == "__main__":
     main()
