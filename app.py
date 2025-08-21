@@ -48,16 +48,24 @@ def main():
             st.error("Vui lòng nhập mô tả ý tưởng chi tiết!")
             return
 
+        # Initialize session state if not exists
+        if 'extractor' not in st.session_state:
+            st.session_state.extractor = CoreConceptExtractor(
+                model_name=model_name,
+                use_checkpointer=use_checkpointer
+            )
+            st.session_state.current_state = None
+            st.session_state.validation_feedback = None
+            st.session_state.results = None
+
         with st.spinner("🤖 Đang phân tích ý tưởng..."):
             try:
-                # Initialize extractor
-                extractor = CoreConceptExtractor(
-                    model_name=model_name,
-                    use_checkpointer=use_checkpointer
-                )
-                
-                # Process the input
-                results = extractor.extract_keywords(input_text)
+                # Process the input based on current state
+                if not st.session_state.current_state:
+                    results = st.session_state.extractor.extract_keywords(input_text)
+                    st.session_state.current_state = results
+                else:
+                    results = st.session_state.current_state
                 
                 # Display results in tabs
                 tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -149,26 +157,29 @@ def main():
                                     "edited_keywords": None
                                 }
                                 # Re-run with approval
-                                results = extractor.extract_keywords(input_text)
+                                st.session_state.validation_feedback = {
+                                    "action": "approve",
+                                    "feedback": None,
+                                    "edited_keywords": None
+                                }
+                                st.session_state.current_state = st.session_state.extractor.extract_keywords(input_text)
                                 st.rerun()
                                 
                         with col2:
                             if st.button("❌ Từ chối & Tạo lại"):
-                                state = results.copy()
                                 feedback = st.text_area("Phản hồi cho việc tạo lại:", key="reject_feedback")
-                                state["validation_feedback"] = {
+                                st.session_state.validation_feedback = {
                                     "action": "reject",
                                     "feedback": feedback,
                                     "edited_keywords": None
                                 }
                                 # Re-run with rejection
-                                results = extractor.extract_keywords(input_text)
+                                st.session_state.current_state = st.session_state.extractor.extract_keywords(input_text)
                                 st.rerun()
                                 
                         with col3:
                             if st.button("✏️ Lưu chỉnh sửa"):
-                                state = results.copy()
-                                state["validation_feedback"] = {
+                                st.session_state.validation_feedback = {
                                     "action": "edit",
                                     "feedback": None,
                                     "edited_keywords": {
@@ -178,7 +189,7 @@ def main():
                                     }
                                 }
                                 # Re-run with edits
-                                results = extractor.extract_keywords(input_text)
+                                st.session_state.current_state = st.session_state.extractor.extract_keywords(input_text)
                                 st.rerun()
                 
                 with tab4:
