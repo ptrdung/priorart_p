@@ -171,41 +171,93 @@ def main():
                         st.markdown("---")
                         col1, col2, col3 = st.columns([1,1,2])
                         
+                        # Add rejection feedback field if needed
+                        reject_feedback = None
+                        if "show_reject_feedback" not in st.session_state:
+                            st.session_state.show_reject_feedback = False
+
                         with col1:
-                            if st.button("✅ Chấp nhận", type="primary", disabled=st.session_state.phase == "completed"):
-                                st.session_state.validation_feedback = {
+                            approve_button = st.button(
+                                "✅ Chấp nhận", 
+                                type="primary", 
+                                disabled=st.session_state.phase == "completed",
+                                key="approve_button"
+                            )
+                            if approve_button:
+                                # Cập nhật validation feedback
+                                validation_feedback = {
                                     "action": "approve",
                                     "feedback": None,
                                     "edited_keywords": None
                                 }
-                                st.session_state.phase = "continue"
+                                
+                                # Cập nhật state hiện tại với feedback
+                                current_state = st.session_state.current_state.copy()
+                                current_state["validation_feedback"] = validation_feedback
+                                
+                                # Chạy tiếp pipeline với state đã cập nhật
+                                results = st.session_state.extractor.extract_keywords(
+                                    input_text,
+                                    continue_from_state=current_state,
+                                    action="approve"
+                                )
+                                
+                                # Cập nhật session state
+                                st.session_state.current_state = results
+                                st.session_state.validation_feedback = validation_feedback
+                                st.session_state.phase = "completed"
                                 st.rerun()
                                 
                         with col2:
-                            if st.button("❌ Từ chối & Tạo lại", disabled=st.session_state.phase == "completed"):
-                                feedback = st.text_area("Phản hồi cho việc tạo lại:", key="reject_feedback")
-                                st.session_state.validation_feedback = {
-                                    "action": "reject",
-                                    "feedback": feedback,
-                                    "edited_keywords": None
-                                }
-                                st.session_state.phase = "continue"
-                                st.rerun()
+                            reject_button = st.button(
+                                "❌ Từ chối & Tạo lại", 
+                                disabled=st.session_state.phase == "completed",
+                                key="reject_button"
+                            )
+                            if reject_button:
+                                st.session_state.show_reject_feedback = True
+                                
+                            if st.session_state.show_reject_feedback:
+                                reject_feedback = st.text_area(
+                                    "Phản hồi cho việc tạo lại:",
+                                    key="reject_feedback_input"
+                                )
+                                if st.button("Xác nhận từ chối", key="confirm_reject"):
+                                    st.session_state.validation_feedback = {
+                                        "action": "reject",
+                                        "feedback": reject_feedback,
+                                        "edited_keywords": None
+                                    }
+                                    st.session_state.phase = "continue"
+                                    st.session_state.show_reject_feedback = False
+                                    st.rerun()
                                 
                         with col3:
-                            if st.button("✏️ Lưu chỉnh sửa", disabled=st.session_state.phase == "completed"):
-                                st.session_state.validation_feedback = {
-                                    "action": "edit",
-                                    "feedback": None,
-                                    "edited_keywords": {
-                                        "problem_purpose": [k.strip() for k in edited_keywords["problem_purpose"] if k.strip()],
-                                        "object_system": [k.strip() for k in edited_keywords["object_system"] if k.strip()],
-                                        "environment_field": [k.strip() for k in edited_keywords["environment_field"] if k.strip()]
+                            edit_button = st.button(
+                                "✏️ Lưu chỉnh sửa", 
+                                disabled=st.session_state.phase == "completed",
+                                key="edit_button"
+                            )
+                            if edit_button:
+                                # Validate edited keywords
+                                valid_edits = all(
+                                    any(k.strip() for k in keywords)
+                                    for keywords in edited_keywords.values()
+                                )
+                                if valid_edits:
+                                    st.session_state.validation_feedback = {
+                                        "action": "edit",
+                                        "feedback": None,
+                                        "edited_keywords": {
+                                            "problem_purpose": [k.strip() for k in edited_keywords["problem_purpose"] if k.strip()],
+                                            "object_system": [k.strip() for k in edited_keywords["object_system"] if k.strip()],
+                                            "environment_field": [k.strip() for k in edited_keywords["environment_field"] if k.strip()]
+                                        }
                                     }
-                                }
-                                st.session_state.phase = "continue"
-                                st.rerun()
-                                st.rerun()
+                                    st.session_state.phase = "continue"
+                                    st.rerun()
+                                else:
+                                    st.error("Vui lòng đảm bảo mỗi danh mục có ít nhất một từ khóa")
                 
                 with tab4:
                     st.subheader("Kết quả tìm kiếm Patents")

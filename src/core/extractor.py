@@ -213,7 +213,9 @@ class CoreConceptExtractor:
             elif action == "approve":
                 # Continue with approved keywords
                 logger.info("Continuing with approved keywords")
-                return self._continue_with_approved_keywords(state)
+                result = self._continue_with_approved_keywords(state)
+                logger.info("Pipeline completed with approved keywords")
+                return result
                 
             else:
                 logger.warning(f"Unknown action: {action}, continuing with current state")
