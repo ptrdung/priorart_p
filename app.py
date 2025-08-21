@@ -1,5 +1,5 @@
 import streamlit as st
-from src.core.extractor import CoreConceptExtractor
+from src.core.extractor import CoreConceptExtractor, ValidationFeedback, SeedKeywords
 import asyncio
 from typing import Dict
 import json
@@ -31,23 +31,22 @@ def display_concept_matrix(concept_matrix):
 def display_keywords(seed_keywords):
     st.subheader("Generated Keywords")
     if seed_keywords:
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.write("Core Keywords:")
-            st.text_area("Core", "\n".join(seed_keywords.core), key="core_edit")
-        with col2:
-            st.write("Technical Keywords:")
-            st.text_area("Technical", "\n".join(seed_keywords.technical), key="tech_edit")
-        with col3:
-            st.write("Field Keywords:")
-            st.text_area("Field", "\n".join(seed_keywords.field), key="field_edit")
+        for field, keywords in seed_keywords.dict().items():
+            st.markdown(f"**{field.replace('_', ' ').title()}:**")
+            keywords_str = ", ".join(keywords)
+            st.text_area(
+                label=field,
+                value=keywords_str,
+                key=f"{field}_edit",
+                help=f"Edit {field.replace('_', ' ')} keywords"
+            )
 
 def get_edited_keywords():
-    from src.core.extractor import KeywordSet
-    return KeywordSet(
-        core=st.session_state.core_edit.split('\n'),
-        technical=st.session_state.tech_edit.split('\n'),
-        field=st.session_state.field_edit.split('\n')
+    from src.core.extractor import SeedKeywords
+    return SeedKeywords(
+        problem_purpose=[k.strip() for k in st.session_state.problem_purpose_edit.split(',')],
+        object_system=[k.strip() for k in st.session_state.object_system_edit.split(',')],
+        environment_field=[k.strip() for k in st.session_state.environment_field_edit.split(',')]
     )
 
 def process_step(state):
@@ -62,24 +61,43 @@ def process_step(state):
         display_keywords(state['seed_keywords'])
         st.session_state.keywords_displayed = True
         
-        # Show action buttons
+        # Show action buttons with feedback
+        st.markdown("### Review and Action")
         col1, col2, col3 = st.columns(3)
+        
         with col1:
-            if st.button("Approve"):
+            if st.button("✅ Approve"):
                 st.session_state.processing = True
-                state['validation_feedback'] = {'action': 'approve'}
+                feedback = ValidationFeedback(action="approve")
+                state['validation_feedback'] = feedback
                 return state
+                
         with col2:
-            if st.button("Reject"):
-                st.session_state.processing = True
-                state['validation_feedback'] = {'action': 'reject'}
-                return state
+            if st.button("❌ Reject"):
+                feedback_text = st.text_input("Provide feedback for rejection:")
+                if st.button("Submit Rejection"):
+                    st.session_state.processing = True
+                    feedback = ValidationFeedback(action="reject", feedback=feedback_text)
+                    state['validation_feedback'] = feedback
+                    return state
+                    
         with col3:
-            if st.button("Edit"):
+            if st.button("✏️ Edit"):
                 st.session_state.processing = True
                 edited_keywords = get_edited_keywords()
-                state['validation_feedback'] = {'action': 'edit', 'edited_keywords': edited_keywords}
+                feedback = ValidationFeedback(action="edit", edited_keywords=edited_keywords)
+                state['validation_feedback'] = feedback
                 return state
+    
+    # Display final results if available
+    if state.get('final_url'):
+        st.success("Processing completed!")
+        st.subheader("Search Results")
+        for url_data in state['final_url']:
+            st.markdown(f"- [{url_data['url']}]({url_data['url']})")
+            st.write(f"Scenario Score: {url_data['user_scenario']}")
+            st.write(f"Problem Score: {url_data['user_problem']}")
+            st.markdown("---")
     
     return state
 

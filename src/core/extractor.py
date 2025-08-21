@@ -296,47 +296,16 @@ class CoreConceptExtractor:
         return {"seed_keywords": seed_keywords}
     
     def step3_human_evaluation(self, state: ExtractionState) -> ExtractionState:
-        """Step 3: Human in the loop evaluation with three options"""
-        msgs = self.validation_messages
-        
-        print("\n" + msgs["separator"])
-        print(msgs["final_evaluation_title"])
-        print(msgs["separator"])
-        
-        # Display final results
-        concept_matrix = state["concept_matrix"]
-        seed_keywords = state["seed_keywords"]
-        
-        print(msgs["concept_matrix_header"])
-        for field, value in concept_matrix.dict().items():
-            print(f"  • {field.replace('_', ' ').title()}: {value}")
-        
-        print(msgs["seed_keywords_header"])
-        for field, keywords in seed_keywords.dict().items():
-            print(f"  • {field.replace('_', ' ').title()}: {keywords}")
-        
-        print(msgs["divider"])
-        print(msgs["action_options"])
-        
-        # Get user action
-        while True:
-            action = input(msgs["action_prompt"]).lower().strip()
-            if action in ['1', 'approve', 'a']:
-                feedback = ValidationFeedback(action="approve")
-                break
-            elif action in ['2', 'reject', 'r']:
-                feedback_text = input(msgs["reject_feedback_prompt"])
-                feedback = ValidationFeedback(action="reject", feedback=feedback_text)
-                break
-            elif action in ['3', 'edit', 'e']:
-                feedback = self._get_manual_edits(seed_keywords)
-                break
-            else:
-                print(msgs["invalid_action"])
-        
-        state["validation_feedback"] = feedback
-        
-        return {"validation_feedback": feedback}
+        """Step 3: Human in the loop evaluation with three options
+        Returns the current state without feedback, allowing the UI to handle user interaction
+        """
+        # Simply return the current state with empty validation_feedback
+        # The Streamlit interface will display the keywords and handle user actions
+        return {
+            "concept_matrix": state["concept_matrix"],
+            "seed_keywords": state["seed_keywords"],
+            "validation_feedback": None  # Will be set by the Streamlit interface
+        }
 
     def manual_editing(self, state: ExtractionState) -> ExtractionState:
         """Allow user to manually edit keywords"""
