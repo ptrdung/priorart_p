@@ -1,0 +1,199 @@
+import streamlit as st
+import json
+from src.core.extractor import CoreConceptExtractor
+
+st.set_page_config(
+    page_title="Patent AI Agent",
+    page_icon="🔍",
+    layout="wide"
+)
+
+def main():
+    st.title("🔍 Patent AI Agent - Keyword Extraction System")
+    st.markdown("""
+    ### Tìm kiếm patents tương tự dựa trên mô tả ý tưởng
+    Hệ thống sẽ phân tích ý tưởng của bạn và tìm các patents liên quan sử dụng AI
+    """)
+
+    # Sidebar configuration
+    with st.sidebar:
+        st.header("⚙️ Cấu hình")
+        model_name = st.selectbox(
+            "Chọn mô hình",
+            ["qwen2.5:3b-instruct"],
+            index=0
+        )
+        use_checkpointer = st.checkbox("Sử dụng checkpointer", value=True)
+
+    # Main input area
+    st.header("📝 Nhập mô tả ý tưởng của bạn")
+    
+    # Template for input
+    template = """
+    **Idea title**: [Tên ý tưởng]
+
+    **User scenario**: [Mô tả tình huống sử dụng]
+
+    **User problem**: [Vấn đề cần giải quyết]
+    """
+    
+    input_text = st.text_area(
+        "Mô tả ý tưởng của bạn theo template sau:",
+        template,
+        height=300
+    )
+
+    if st.button("🚀 Bắt đầu phân tích"):
+        if input_text == template or len(input_text.strip()) < 50:
+            st.error("Vui lòng nhập mô tả ý tưởng chi tiết!")
+            return
+
+        with st.spinner("🤖 Đang phân tích ý tưởng..."):
+            try:
+                # Initialize extractor
+                extractor = CoreConceptExtractor(
+                    model_name=model_name,
+                    use_checkpointer=use_checkpointer
+                )
+                
+                # Process the input
+                results = extractor.extract_keywords(input_text)
+                
+                # Display results in tabs
+                tab1, tab2, tab3, tab4, tab5 = st.tabs([
+                    "📊 Phân tích cơ bản",
+                    "🎯 Từ khóa chính",
+                    "👤 Đánh giá & Chỉnh sửa",
+                    "🔍 Kết quả tìm kiếm",
+                    "📑 Chi tiết"
+                ])
+                
+                with tab1:
+                    st.subheader("Phân tích cơ bản")
+                    if results.get("problem"):
+                        st.markdown("### 🎯 Vấn đề chính")
+                        st.write(results["problem"])
+                    if results.get("technical"):
+                        st.markdown("### 💡 Đặc điểm kỹ thuật")
+                        st.write(results["technical"])
+                    if results.get("ipcs"):
+                        st.markdown("### 📑 Phân loại IPC")
+                        st.write(results["ipcs"])
+
+                with tab2:
+                    st.subheader("Từ khóa trích xuất")
+                    if results.get("seed_keywords"):
+                        seed_keywords = results["seed_keywords"]
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.markdown("### 🎯 Vấn đề & Mục đích")
+                            for kw in seed_keywords.problem_purpose:
+                                st.markdown(f"- {kw}")
+                                
+                        with col2:
+                            st.markdown("### 🔧 Đối tượng & Hệ thống")
+                            for kw in seed_keywords.object_system:
+                                st.markdown(f"- {kw}")
+                                
+                        with col3:
+                            st.markdown("### 🌍 Môi trường & Lĩnh vực")
+                            for kw in seed_keywords.environment_field:
+                                st.markdown(f"- {kw}")
+
+                with tab3:
+                    st.subheader("Đánh giá và Chỉnh sửa Từ khóa")
+                    if results.get("seed_keywords"):
+                        seed_keywords = results["seed_keywords"]
+                        
+                        st.markdown("### 🤖 Từ khóa được đề xuất")
+                        st.markdown("Vui lòng xem xét và đánh giá các từ khóa được trích xuất:")
+                        
+                        # Display current keywords in editable text areas
+                        col1, col2, col3 = st.columns(3)
+                        
+                        edited_keywords = {}
+                        with col1:
+                            st.markdown("#### 🎯 Vấn đề & Mục đích")
+                            edited_keywords["problem_purpose"] = st.text_area(
+                                "Chỉnh sửa từ khóa (phân cách bằng dấu phẩy)",
+                                value=", ".join(seed_keywords.problem_purpose),
+                                key="edit_problem"
+                            ).split(",")
+                            
+                        with col2:
+                            st.markdown("#### 🔧 Đối tượng & Hệ thống")
+                            edited_keywords["object_system"] = st.text_area(
+                                "Chỉnh sửa từ khóa (phân cách bằng dấu phẩy)",
+                                value=", ".join(seed_keywords.object_system),
+                                key="edit_object"
+                            ).split(",")
+                            
+                        with col3:
+                            st.markdown("#### 🌍 Môi trường & Lĩnh vực")
+                            edited_keywords["environment_field"] = st.text_area(
+                                "Chỉnh sửa từ khóa (phân cách bằng dấu phẩy)",
+                                value=", ".join(seed_keywords.environment_field),
+                                key="edit_environment"
+                            ).split(",")
+                        
+                        st.markdown("---")
+                        col1, col2, col3 = st.columns([1,1,2])
+                        
+                        with col1:
+                            if st.button("✅ Chấp nhận", type="primary"):
+                                state = results.copy()
+                                state["validation_feedback"] = {
+                                    "action": "approve",
+                                    "feedback": None,
+                                    "edited_keywords": None
+                                }
+                                # Re-run with approval
+                                results = extractor.extract_keywords(input_text)
+                                st.rerun()
+                                
+                        with col2:
+                            if st.button("❌ Từ chối & Tạo lại"):
+                                state = results.copy()
+                                feedback = st.text_area("Phản hồi cho việc tạo lại:", key="reject_feedback")
+                                state["validation_feedback"] = {
+                                    "action": "reject",
+                                    "feedback": feedback,
+                                    "edited_keywords": None
+                                }
+                                # Re-run with rejection
+                                results = extractor.extract_keywords(input_text)
+                                st.rerun()
+                                
+                        with col3:
+                            if st.button("✏️ Lưu chỉnh sửa"):
+                                state = results.copy()
+                                state["validation_feedback"] = {
+                                    "action": "edit",
+                                    "feedback": None,
+                                    "edited_keywords": {
+                                        "problem_purpose": [k.strip() for k in edited_keywords["problem_purpose"] if k.strip()],
+                                        "object_system": [k.strip() for k in edited_keywords["object_system"] if k.strip()],
+                                        "environment_field": [k.strip() for k in edited_keywords["environment_field"] if k.strip()]
+                                    }
+                                }
+                                # Re-run with edits
+                                results = extractor.extract_keywords(input_text)
+                                st.rerun()
+                
+                with tab4:
+                    st.subheader("Kết quả tìm kiếm Patents")
+                    if results.get("final_url"):
+                        for idx, url in enumerate(results["final_url"], 1):
+                            st.markdown(f"### Patent {idx}")
+                            st.markdown(f"[Xem chi tiết]({url})")
+                            
+                with tab5:
+                    st.subheader("Chi tiết kết quả")
+                    st.json(results)
+
+            except Exception as e:
+                st.error(f"❌ Có lỗi xảy ra: {str(e)}")
+
+if __name__ == "__main__":
+    main()
