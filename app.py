@@ -61,19 +61,32 @@ def main():
         with st.spinner("🤖 Đang phân tích ý tưởng..."):
             try:
                 if st.session_state.phase == "initial":
-                    # Run until keyword generation
+                    # First run until keyword generation
                     results = st.session_state.extractor.extract_keywords(input_text)
                     st.session_state.current_state = results
                     st.session_state.phase = "evaluation"
                 elif st.session_state.phase == "continue" and st.session_state.validation_feedback:
-                    # Continue with user feedback
+                    action = st.session_state.validation_feedback["action"]
+                    
+                    # Update current state with feedback
                     st.session_state.current_state["validation_feedback"] = st.session_state.validation_feedback
+                    
+                    # Process based on action type
                     results = st.session_state.extractor.extract_keywords(
-                        input_text, 
-                        continue_from_state=st.session_state.current_state
+                        input_text,
+                        continue_from_state=st.session_state.current_state,
+                        action=action
                     )
-                    st.session_state.current_state = results
-                    st.session_state.phase = "completed"
+                    
+                    if action == "reject":
+                        # Stay in evaluation phase for new keywords
+                        st.session_state.current_state = results
+                        st.session_state.phase = "evaluation"
+                        st.session_state.validation_feedback = None
+                    else:
+                        # Continue to completion for approve/edit
+                        st.session_state.current_state = results
+                        st.session_state.phase = "completed"
                 else:
                     results = st.session_state.current_state
                 

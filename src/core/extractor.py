@@ -194,11 +194,30 @@ class CoreConceptExtractor:
 
         return workflow.compile()
     
-    def extract_keywords(self, input_text: str, continue_from_state: Dict = None) -> Dict:
-        """Run the patent extraction workflow with optional continuation from a previous state"""
+    def extract_keywords(self, input_text: str, continue_from_state: Dict = None, action: str = None) -> Dict:
+        """Run the patent extraction workflow with optional continuation based on user action"""
         if continue_from_state:
-            # Continue from previous state with validation feedback
-            state = continue_from_state
+            # Convert dictionary to ExtractionState if needed
+            state = continue_from_state if isinstance(continue_from_state, ExtractionState) else ExtractionState(**continue_from_state)
+            
+            if action == "reject":
+                # Regenerate keywords with feedback
+                logger.info("Regenerating keywords based on rejection feedback")
+                return self._regenerate_keywords(state)
+                
+            elif action == "edit":
+                # Continue with edited keywords
+                logger.info("Continuing with edited keywords")
+                return self._continue_with_approved_keywords(state)
+                
+            elif action == "approve":
+                # Continue with approved keywords
+                logger.info("Continuing with approved keywords")
+                return self._continue_with_approved_keywords(state)
+                
+            else:
+                logger.warning(f"Unknown action: {action}, continuing with current state")
+                return dict(state)
         else:
             # Start new extraction
             state = ExtractionState(
@@ -218,15 +237,6 @@ class CoreConceptExtractor:
             # Run initial steps until keyword generation
             result = self._run_until_evaluation(state)
             return dict(result)
-
-        # Continue with full pipeline including validation feedback
-        if self.use_checkpointer:
-            config = {"configurable": {"thread_id": settings.THREAD_ID}}
-            result = self.graph.invoke(state, config)
-        else:
-            result = self.graph.invoke(state)
-        
-        return dict(result)
 
     def _run_until_evaluation(self, state: ExtractionState) -> Dict:
         """Run only the initial steps until keyword generation"""
@@ -252,6 +262,44 @@ class CoreConceptExtractor:
         # Compile and run
         initial_graph = workflow.compile()
         result = initial_graph.invoke(state)
+        
+        return dict(result)
+
+    def _regenerate_keywords(self, state: ExtractionState) -> Dict:
+        """Regenerate keywords from the existing concept matrix"""
+        workflow = StateGraph(ExtractionState)
+        
+        # Add only the keyword generation node
+        workflow.add_node("step2_keyword_generation", self.step2_keyword_generation)
+        workflow.set_entry_point("step2_keyword_generation")
+        
+        # Compile and run
+        regen_graph = workflow.compile()
+        result = regen_graph.invoke(state)
+        
+        # Merge results back into the state
+        state.update(result)
+        return dict(state)
+
+    def _continue_with_approved_keywords(self, state: ExtractionState) -> Dict:
+        """Continue processing with approved keywords"""
+        workflow = StateGraph(ExtractionState)
+        
+        # Add nodes for remaining steps
+        workflow.add_node("gen_key", self.gen_key)
+        workflow.add_node("genQuery", self.genQuery)
+        workflow.add_node("genUrl", self.genUrl)
+        workflow.add_node("evalUrl", self.evalUrl)
+
+        # Define flow for remaining steps
+        workflow.set_entry_point("gen_key")
+        workflow.add_edge("gen_key", "genQuery")
+        workflow.add_edge("genQuery", "genUrl")
+        workflow.add_edge("genUrl", "evalUrl")
+
+        # Compile and run
+        continue_graph = workflow.compile()
+        result = continue_graph.invoke(state)
         
         return dict(result)
         
