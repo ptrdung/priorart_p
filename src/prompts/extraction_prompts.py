@@ -64,19 +64,24 @@ class ExtractionPrompts:
         prompt = PromptTemplate(
             template="""<OBJECTIVE_AND_PERSONA>
 You are a patent analyst specializing in technical idea normalization. Your task is to read the provided input and extract two main points:
-1. The main problem or challenge described.
-2. The core technical solution, method, or approach proposed.
-Your extraction must be as detailed and specific as possible, capturing all explicit technical details, constraints, and context present in the input.
+1. The main problem or challenge explicitly described.
+2. The core technical solution, method, or approach explicitly proposed.
+Your extraction must preserve maximum fidelity to the input, capturing all explicit technical details, constraints, and context without omission.
 </OBJECTIVE_AND_PERSONA>
 
 <INSTRUCTIONS>
 1. Carefully read the input idea in full.
-2. Identify and clearly state the main problem or challenge, including any technical constraints, requirements, or context explicitly mentioned.
-3. Identify and clearly state the core technical solution, method, or approach, including all relevant technical details, mechanisms, steps, and context provided.
-4. Use only explicit information from the input; do not infer, generalize, or paraphrase.
-5. If a point is missing, respond exactly with: "Not mentioned."
-6. If multiple explicit details are present, include all of them in a concise, structured manner.
-7. Prefer direct quotations or closely paraphrased phrases from the input for maximum fidelity.
+2. For the "problem":
+   - Identify only what is explicitly described as the problem, challenge, limitation, or requirement.
+   - Include all explicit technical constraints, requirements, and context.
+   - If no problem is mentioned, output exactly: "Not mentioned."
+3. For the "technical":
+   - Identify only the explicitly proposed technical solution, method, or approach.
+   - Include all explicit technical details, mechanisms, components, steps, and context.
+   - If no technical solution is mentioned, output exactly: "Not mentioned."
+4. Use direct quotations from the input whenever possible. If necessary for readability, you may minimally reassemble fragmented text, but do not infer or add unstated information.
+5. If multiple distinct explicit details are present, include all of them clearly.
+6. Do not generalize, summarize, or explain beyond what is explicitly written in the input.
 </INSTRUCTIONS>
 
 <CONTEXT>
@@ -89,7 +94,7 @@ Input idea:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Extract and return only the JSON output with two fields: "problem" and "technical". Each field should be as detailed as possible, capturing all explicit technical details and context from the input. Do not add explanations or extra text.
+Extract and return only the JSON output with exactly two fields: "problem" and "technical". Each field must include every explicit detail from the input. If a field is not mentioned, use "Not mentioned." Do not add any extra explanation or text outside the JSON.
 </RECAP>
 """,
             input_variables=["input"],
@@ -104,31 +109,38 @@ Extract and return only the JSON output with two fields: "problem" and "technica
         
         prompt = PromptTemplate(
             template="""<OBJECTIVE_AND_PERSONA>
-You are a patent concept extraction specialist skilled in identifying factual, structured insights from technical and patent documents for prior art search.
+You are a patent concept extraction specialist with expertise in identifying precise, factual, and structured insights from technical and patent documents for prior art search. Your role is to extract only what is explicitly written, ensuring maximum fidelity to the source text.
 </OBJECTIVE_AND_PERSONA>
 
 <INSTRUCTIONS>
-1. Read and analyze the "Document" section in full.
-2. For each Concept Matrix field below, extract all explicit, detailed information using exact terminology as stated in the document.
-3. Do not infer, generalize, or paraphrase. Only use explicit content from the document.
-4. Each field must be unique and non-overlapping; do not duplicate phrases across fields.
+1. Read and analyze the "Document" section in full without skipping any part.
+2. For each Concept Matrix field, extract only explicit information stated in the text, preserving exact terminology and context.
+3. Do not infer, generalize, summarize, or rephrase beyond the explicit wording of the document.
+4. Ensure each field contains unique, non-overlapping content; do not duplicate or recycle text across fields.
+5. If a Concept Matrix field is not explicitly mentioned in the document, output exactly: "Not mentioned."
 </INSTRUCTIONS>
 
 <CONCEPT MATRIX FIELDS>
-1. Problem/Purpose — What specific technical problem does the invention address, or what is its primary objective, as explicitly stated in the document?
-2. Object/System — What is the main object, device, system, material, or process being described? Use the exact terminology found in the document.
-3. Environment/Field — What is the intended application domain, industry sector, or operational context where this invention is designed to be used?
+1. Problem/Purpose — The specific technical problem, limitation, or primary objective the invention addresses, as explicitly stated in the document.
+2. Object/System — The main object, device, system, material, or process described in the document, using the exact terminology provided.
+3. Environment/Field — The intended application domain, industry sector, or operational context in which the invention is designed to be used, as explicitly stated in the document.
+</CONCEPT MATRIX FIELDS>
 
 <CONSTRAINTS>
-- Use only domain-specific terminology and descriptive context exactly as stated in the provided text.
-- Do not infer, generalize, or hallucinate beyond explicit statements.
-- Each Concept Matrix field must be unique and non-redundant relative to all other fields.
-- Do not repeat content between fields.
+- Use only terminology, context, and descriptions exactly as written in the provided text.
+- Do not infer, add unstated details, or use synonyms.
+- Each Concept Matrix field must be strictly unique and non-redundant relative to the others.
+- If no explicit information is available for a field, return "Not mentioned."
 </CONSTRAINTS>
 
 <CONTEXT>
 Document:
 {problem}
+
+**Concept Matrix:**  
+1. **Problem/Purpose** — The specific technical problem, limitation, or objective addressed.  
+2. **Object/System** — The main object, device, system, material, or process described.  
+3. **Environment/Field** — The intended application domain, industry sector, or operational context.
 </CONTEXT>
 
 <OUTPUT_FORMAT>
@@ -136,7 +148,7 @@ Document:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Extract all explicit, detailed content for each Concept Matrix field using exact terminology from the document. Output strictly in the defined JSON format—no explanations, no extra text, and no code fences.
+Return only the JSON output. Each must contain only explicit details from the input document. If a field is missing, return "Not mentioned." Do not include explanations, comments, or text outside of the JSON.
 </RECAP>
 """,
             input_variables=["input_text"],
@@ -156,25 +168,25 @@ You are an expert patent search analyst. Your task is to extract domain-specific
 </OBJECTIVE_AND_PERSONA>
 
 <INSTRUCTIONS>
-1. Read each Concept Matrix component carefully.
-2. Extract only explicit technical nouns, industry terms, or formal nomenclature.
-3. Select discriminative terms that uniquely identify the technical solution or context.
-4. Each keyword must be concise: strictly 1–2 words only.
-5. Provide distinct, non-redundant keywords for each component.
+1. Read each Concept Matrix component in full.
+2. Extract only explicit technical nouns, formal nomenclature, or industry-specific terminology exactly as written.
+3. Select discriminative terms that clearly identify the technical solution, material, or context.
+4. Each keyword must be concise: strictly 1–2 words.
+5. Provide unique, non-overlapping keywords for each component.
 </INSTRUCTIONS>
 
 <CONSTRAINTS>
-Dos:
-- Use domain-specific terminology directly from the text.
+Do:
+- Use terminology exactly as stated in the text, without modification.
 - Keep every keyword short: maximum 1–2 words.
-- Include algorithm names, sensor types, material names, or component names.
-- Ensure keywords are unique across components.
+- Include algorithm names, sensor types, material names, standards, or component names.
+- Ensure keywords are unique across components and do not repeat.
 
-Don’ts:
-- Do not include generic words such as “system”, “method”, or “device” unless explicitly modified by technical qualifiers.
+Don’t:
+- Do not include generic terms
 - Do not create keywords longer than 3 words.
-- Do not infer or generalize terms beyond explicit mentions.
-- Do not duplicate or reuse keywords across components.
+- Do not infer, summarize, or invent keywords not explicitly mentioned.
+- Do not duplicate or reuse keywords across multiple components.
 </CONSTRAINTS>
 
 <CONTEXT>
@@ -193,7 +205,7 @@ Feedback:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Extract explicit, precise, discriminative keywords (1–2 words only) for each Concept Matrix component. Ensure uniqueness across components. Output strictly in the defined JSON format without explanations or extra text.
+Extract explicit, precise, discriminative keywords (strictly 1–2 words) for each Concept Matrix component. Ensure uniqueness across components. If a field has no explicit keyword, return "Not mentioned." Output strictly in the defined JSON format with no explanations or extra text.
 </RECAP>
 """,
             input_variables=["problem_purpose", "object_system", "environment_field", "feedback"],
@@ -267,33 +279,37 @@ Generate a concise technical summary (max 400 words) focusing on core technical 
         
         prompt = PromptTemplate(
             template="""<OBJECTIVE_AND_PERSONA>
-You are an expert prior art patent searcher with extensive experience in novelty and inventive-step assessment. Your role is to construct search queries that balance recall and precision, moving from broad coverage to highly discriminative targeting.
+You are an expert prior art patent searcher with extensive experience in novelty and inventive-step assessment. Your role is to construct Boolean patent search queries that optimize recall and precision, progressively moving from broad coverage to highly discriminative targeting.
 </OBJECTIVE_AND_PERSONA>
 
 <INSTRUCTIONS>
-1. Carefully analyze the provided invention context and the three key concept groups.  
-2. Review CPC codes to understand the classification scope and leverage them to refine queries.  
-3. Extract the most technically discriminative and essential 2–3 keywords per concept group (use OR operator).  
-4. Construct exactly 6 concise. Two queries per strategy: Broad, Focused, Narrow.   
-5. Apply strict Boolean logic without paraphrasing or redundancy.  
-6. Use parentheses for clarity in OR combinations and to control operator precedence.  
-
+1. Read the invention context and all three key concept groups carefully.  
+2. Review CPC codes to understand the classification scope and incorporate them into every query.  
+3. From each concept group, extract the 2–3 most explicit, technical, and discriminative keywords (combine with OR).  
+4. Construct exactly 6 queries:  
+   - 2 Broad queries  
+   - 2 Focused queries  
+   - 2 Narrow queries  
+5. Apply strict Boolean logic using only AND, OR, NOT, and parentheses.  
+6. Keep each query concise, with 8–10 unique keywords maximum.  
+7. Do not paraphrase or infer; only use explicit keywords and CPC codes provided.  
+8. Use parentheses for all OR combinations and to enforce correct operator precedence.  
+9. If fewer than 2–3 explicit keywords are available in a concept group, use only those given (do not invent).  
 </INSTRUCTIONS>
 
 <CONSTRAINTS>
-Dos:
-- Use ONLY Boolean operators (AND, OR, NOT, parentheses).  
-- Limit to 8–10 unique keywords per query.  
-- Maintain strict technical specificity; prioritize discriminative terminology over breadth.  
-- Incorporate CPC codes directly into queries.   
+Do:  
+- Use Boolean operators only: AND, OR, NOT, parentheses.  
+- Incorporate CPC codes in every query.  
+- Maintain strict technical specificity and discriminative terminology.  
+- Ensure each query is unique and consistent with its assigned strategy (Broad, Focused, Narrow).  
 
-Don'ts:
-- Do not deviate from the three strategy categories (Broad, Focused, Narrow).  
-- Do not exceed keyword limits with verbose phrasing.  
-- Do not omit CPC codes when they are provided.  
-- Do not introduce generic or non-technical terms.  
-- Do not add commentary, explanations, or rephrasing of the invention context.  
-
+Don't:  
+- Do not exceed 10 unique keywords per query.  
+- Do not omit CPC codes when provided.  
+- Do not use generic or non-technical words.  
+- Do not add explanations, commentary, or reformulations of the invention context.  
+- Do not duplicate identical queries across strategies.  
 </CONSTRAINTS>
 
 <CONTEXT>
@@ -308,9 +324,9 @@ CPC (Cooperative Patent Classification) Codes:
 - Primary CPCs: {CPC_CODES}  
 
 QUERY CONSTRUCTION STRATEGIES:
-- Strategy 1 (Broad Search): Use a wider combination of representative keywords and CPC codes to maximize coverage.  
-- Strategy 2 (Focused Search): Use more specific and discriminative terms with primary CPC codes to balance recall and precision.  
-- Strategy 3 (Narrow / Precision Search): Use only the most specific terms with strict AND logic and primary CPC codes for high precision.  
+- Strategy 1 (Broad Search): Wider coverage using representative keywords from all concept groups + CPC codes.  
+- Strategy 2 (Focused Search): Balanced recall and precision using more specific, discriminative terms + CPC codes.  
+- Strategy 3 (Narrow / Precision Search): Highest precision using only the most specific keywords with strict AND logic + CPC codes.  
 </CONTEXT>
 
 <OUTPUT_FORMAT>
@@ -318,7 +334,7 @@ QUERY CONSTRUCTION STRATEGIES:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Output exactly 6 patent search queries in JSON format. Use only Boolean operators (AND, OR, NOT). No explanations, notes, or additional text.  
+Return exactly 6 patent search queries in JSON format. Each query must follow Boolean syntax strictly, include CPC codes, and respect keyword limits. Do not add any explanations, notes, or text outside the JSON.
 </RECAP>
 """,
             input_variables=["problem", "problem_purpose_keys", "object_system_keys", "environment_field_keys", "CPC_CODES"],

@@ -132,8 +132,8 @@ class CoreConceptExtractor:
         # Use settings from config file with fallback to parameters
         self.model_name = model_name if model_name is not None else settings.DEFAULT_MODEL_NAME
         self.use_checkpointer = use_checkpointer if use_checkpointer is not None else settings.USE_CHECKPOINTER
-        
-        self.llm = Ollama(model=self.model_name, temperature=settings.MODEL_TEMPERATURE)
+
+        self.llm = Ollama(model=self.model_name, temperature=settings.MODEL_TEMPERATURE, num_ctx=settings.NUM_CTX)
         self.tavily_search = TavilySearch(
             max_results=settings.MAX_SEARCH_RESULTS,
             topic="general",
