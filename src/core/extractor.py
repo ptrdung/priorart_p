@@ -240,6 +240,8 @@ class CoreConceptExtractor:
 
     def complete_pipeline(self, state: Dict) -> Dict:
         """Complete the pipeline after user feedback"""
+        action = state.get("validation_feedback", {}).get("action")
+        
         # Create a subgraph for remaining steps
         completion_workflow = StateGraph(ExtractionState)
         
@@ -251,21 +253,16 @@ class CoreConceptExtractor:
         completion_workflow.add_node("genUrl", self.genUrl)
         completion_workflow.add_node("evalUrl", self.evalUrl)
 
-        # Define flow for remaining steps
-        completion_workflow.set_entry_point("step3_human_evaluation")
+        # Set entry point based on user action
+        if action == "approve":
+            completion_workflow.set_entry_point("gen_key")
+        elif action == "edit":
+            completion_workflow.set_entry_point("manual_editing")
+            completion_workflow.add_edge("manual_editing", "gen_key")
+        else:  # reject or no action
+            return state
         
-        # Add conditional edges based on human evaluation
-        completion_workflow.add_conditional_edges(
-            "step3_human_evaluation",
-            self._get_human_action,
-            {
-                "approve": "gen_key",
-                "reject": END,  # End here if rejected
-                "edit": "manual_editing"
-            }
-        )
-        
-        completion_workflow.add_edge("manual_editing", "gen_key")
+        # Add remaining edges
         completion_workflow.add_edge("gen_key", "genQuery")
         completion_workflow.add_edge("genQuery", "genUrl")
         completion_workflow.add_edge("genUrl", "evalUrl")
