@@ -194,29 +194,65 @@ class CoreConceptExtractor:
 
         return workflow.compile()
     
-    def extract_keywords(self, input_text: str) -> Dict:
-        """Run the simplified 3-step keyword extraction workflow"""
-        initial_state = ExtractionState(
-            input_text=input_text,
-            problem=None,
-            technical=None,
-            concept_matrix=None,
-            seed_keywords=None,
-            validation_feedback=None,
-            final_keywords=None,
-            ipcs=None,
-            summary_text=None,
-            queries=None,
-            final_url=None
-        )
-        
+    def extract_keywords(self, input_text: str, continue_from_state: Dict = None) -> Dict:
+        """Run the patent extraction workflow with optional continuation from a previous state"""
+        if continue_from_state:
+            # Continue from previous state with validation feedback
+            state = continue_from_state
+        else:
+            # Start new extraction
+            state = ExtractionState(
+                input_text=input_text,
+                problem=None,
+                technical=None,
+                concept_matrix=None,
+                seed_keywords=None,
+                validation_feedback=None,
+                final_keywords=None,
+                ipcs=None,
+                summary_text=None,
+                queries=None,
+                final_url=None
+            )
+            
+            # Run initial steps until keyword generation
+            result = self._run_until_evaluation(state)
+            return dict(result)
+
+        # Continue with full pipeline including validation feedback
         if self.use_checkpointer:
             config = {"configurable": {"thread_id": settings.THREAD_ID}}
-            result = self.graph.invoke(initial_state, config)
+            result = self.graph.invoke(state, config)
         else:
-            result = self.graph.invoke(initial_state)
+            result = self.graph.invoke(state)
         
-        # Return all ExtractionState fields
+        return dict(result)
+
+    def _run_until_evaluation(self, state: ExtractionState) -> Dict:
+        """Run only the initial steps until keyword generation"""
+        # Create a subgraph for initial steps
+        workflow = StateGraph(ExtractionState)
+        
+        # Add nodes for initial steps
+        workflow.add_node("input_normalization", self.input_normalization)
+        workflow.add_node("step0", self.step0)
+        workflow.add_node("step1_concept_extraction", self.step1_concept_extraction)
+        workflow.add_node("step2_keyword_generation", self.step2_keyword_generation)
+        workflow.add_node("summary_prompt_and_parser", self.summary_prompt_and_parser)
+        workflow.add_node("call_ipcs_api", self.call_ipcs_api)
+
+        # Define flow until keyword generation
+        workflow.set_entry_point("input_normalization")
+        workflow.add_edge("input_normalization", "step0")
+        workflow.add_edge("step0", "step1_concept_extraction")
+        workflow.add_edge("step0", "summary_prompt_and_parser")
+        workflow.add_edge("step1_concept_extraction", "step2_keyword_generation")
+        workflow.add_edge("summary_prompt_and_parser", "call_ipcs_api")
+
+        # Compile and run
+        initial_graph = workflow.compile()
+        result = initial_graph.invoke(state)
+        
         return dict(result)
         
     def input_normalization(self, state: ExtractionState) -> ExtractionState:

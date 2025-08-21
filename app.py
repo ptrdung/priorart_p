@@ -55,15 +55,25 @@ def main():
                 use_checkpointer=use_checkpointer
             )
             st.session_state.current_state = None
+            st.session_state.phase = "initial"  # Track current phase
             st.session_state.validation_feedback = None
-            st.session_state.results = None
 
         with st.spinner("🤖 Đang phân tích ý tưởng..."):
             try:
-                # Process the input based on current state
-                if not st.session_state.current_state:
+                if st.session_state.phase == "initial":
+                    # Run until keyword generation
                     results = st.session_state.extractor.extract_keywords(input_text)
                     st.session_state.current_state = results
+                    st.session_state.phase = "evaluation"
+                elif st.session_state.phase == "continue" and st.session_state.validation_feedback:
+                    # Continue with user feedback
+                    st.session_state.current_state["validation_feedback"] = st.session_state.validation_feedback
+                    results = st.session_state.extractor.extract_keywords(
+                        input_text, 
+                        continue_from_state=st.session_state.current_state
+                    )
+                    st.session_state.current_state = results
+                    st.session_state.phase = "completed"
                 else:
                     results = st.session_state.current_state
                 
@@ -149,36 +159,28 @@ def main():
                         col1, col2, col3 = st.columns([1,1,2])
                         
                         with col1:
-                            if st.button("✅ Chấp nhận", type="primary"):
-                                state = results.copy()
-                                state["validation_feedback"] = {
-                                    "action": "approve",
-                                    "feedback": None,
-                                    "edited_keywords": None
-                                }
-                                # Re-run with approval
+                            if st.button("✅ Chấp nhận", type="primary", disabled=st.session_state.phase == "completed"):
                                 st.session_state.validation_feedback = {
                                     "action": "approve",
                                     "feedback": None,
                                     "edited_keywords": None
                                 }
-                                st.session_state.current_state = st.session_state.extractor.extract_keywords(input_text)
+                                st.session_state.phase = "continue"
                                 st.rerun()
                                 
                         with col2:
-                            if st.button("❌ Từ chối & Tạo lại"):
+                            if st.button("❌ Từ chối & Tạo lại", disabled=st.session_state.phase == "completed"):
                                 feedback = st.text_area("Phản hồi cho việc tạo lại:", key="reject_feedback")
                                 st.session_state.validation_feedback = {
                                     "action": "reject",
                                     "feedback": feedback,
                                     "edited_keywords": None
                                 }
-                                # Re-run with rejection
-                                st.session_state.current_state = st.session_state.extractor.extract_keywords(input_text)
+                                st.session_state.phase = "continue"
                                 st.rerun()
                                 
                         with col3:
-                            if st.button("✏️ Lưu chỉnh sửa"):
+                            if st.button("✏️ Lưu chỉnh sửa", disabled=st.session_state.phase == "completed"):
                                 st.session_state.validation_feedback = {
                                     "action": "edit",
                                     "feedback": None,
@@ -188,8 +190,8 @@ def main():
                                         "environment_field": [k.strip() for k in edited_keywords["environment_field"] if k.strip()]
                                     }
                                 }
-                                # Re-run with edits
-                                st.session_state.current_state = st.session_state.extractor.extract_keywords(input_text)
+                                st.session_state.phase = "continue"
+                                st.rerun()
                                 st.rerun()
                 
                 with tab4:
