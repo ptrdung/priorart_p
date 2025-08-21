@@ -3,31 +3,31 @@ from src.core.extractor import CoreConceptExtractor
 import json
 from typing import Dict, Any
 
-def display_concept_matrix(concept_matrix: Dict[str, Any]):
+def display_concept_matrix(concept_matrix):
     st.subheader("Concept Matrix")
     cols = st.columns(3)
     with cols[0]:
         st.write("Problem/Purpose:")
-        st.write(concept_matrix["problem_purpose"])
+        st.write(concept_matrix.problem_purpose)
     with cols[1]:
         st.write("Object/System:")
-        st.write(concept_matrix["object_system"])
+        st.write(concept_matrix.object_system)
     with cols[2]:
         st.write("Environment/Field:")
-        st.write(concept_matrix["environment_field"])
+        st.write(concept_matrix.environment_field)
 
-def display_keywords(seed_keywords: Dict[str, Any]):
+def display_keywords(seed_keywords):
     st.subheader("Generated Keywords")
     cols = st.columns(3)
     with cols[0]:
         st.write("Problem Keywords:")
-        st.write("\n".join(seed_keywords["problem_keywords"]))
+        st.write("\n".join(seed_keywords.problem_purpose))
     with cols[1]:
         st.write("Technical Keywords:")
-        st.write("\n".join(seed_keywords["technical_keywords"]))
+        st.write("\n".join(seed_keywords.object_system))
     with cols[2]:
         st.write("Field Keywords:")
-        st.write("\n".join(seed_keywords["field_keywords"]))
+        st.write("\n".join(seed_keywords.environment_field))
 
 def main():
     st.set_page_config(
@@ -115,17 +115,17 @@ def main():
             if st.session_state.get("editing", False):
                 st.subheader("Edit Keywords")
                 edited_keywords = {
-                    "problem_keywords": st.text_area(
-                        "Problem Keywords (one per line)",
-                        value="\n".join(st.session_state.current_state["seed_keywords"]["problem_keywords"])
+                    "problem_purpose": st.text_area(
+                        "Problem/Purpose Keywords (one per line)",
+                        value="\n".join(st.session_state.current_state["seed_keywords"].problem_purpose)
                     ).split("\n"),
-                    "technical_keywords": st.text_area(
-                        "Technical Keywords (one per line)",
-                        value="\n".join(st.session_state.current_state["seed_keywords"]["technical_keywords"])
+                    "object_system": st.text_area(
+                        "Object/System Keywords (one per line)",
+                        value="\n".join(st.session_state.current_state["seed_keywords"].object_system)
                     ).split("\n"),
-                    "field_keywords": st.text_area(
-                        "Field Keywords (one per line)",
-                        value="\n".join(st.session_state.current_state["seed_keywords"]["field_keywords"])
+                    "environment_field": st.text_area(
+                        "Environment/Field Keywords (one per line)",
+                        value="\n".join(st.session_state.current_state["seed_keywords"].environment_field)
                     ).split("\n")
                 }
 
