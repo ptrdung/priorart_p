@@ -54,8 +54,99 @@ class NormalizationOutput(BaseModel):
         description="The core technical solution, method, or approach described in the input idea."
     )
 
+class SynonymTerm(BaseModel):
+    """Core synonym term for patent search optimization"""
+    term: str = Field(
+        description="Synonym term found in snippets, retaining technical function."
+    )
+    justification: str = Field(
+        description="Short justification (≤10 words) based on snippet evidence."
+    )
+    source: str = Field(
+        description="Source snippet number(s) for this term."
+    )
+
+class RelatedTerm(BaseModel):
+    """Related term for broader/adjacent patent search concepts"""
+    term: str = Field(
+        description="Related term (broader/adjacent/complementary concept)."
+    )
+    rationale: str = Field(
+        description="Rationale for inclusion, referencing snippet evidence."
+    )
+    source: str = Field(
+        description="Source snippet number(s) for this term."
+    )
+
+class SynonymExtractionOutput(BaseModel):
+    """Output model for synonym and related term extraction"""
+    core_synonyms: List[SynonymTerm] = Field(
+        description="List of core synonyms with justifications and sources."
+    )
+    related_terms: List[RelatedTerm] = Field(
+        description="List of related terms with rationales and sources."
+    )
+
 class ExtractionPrompts:
     """Collection of prompt templates for patent keyword extraction"""
+
+    @staticmethod
+    def get_synonym_extraction_prompt_and_parser():
+        """Prompt and parser for extracting synonyms and related terms from snippets"""
+        parser = PydanticOutputParser(pydantic_object=SynonymExtractionOutput)
+        prompt = PromptTemplate(
+            template="""
+<OBJECTIVE_AND_PERSONA>
+You are a patent linguist specializing in technical terminology analysis. Your task is to analyze provided technical snippets and extract high-precision synonyms and related terms for patent search optimization.
+</OBJECTIVE_AND_PERSONA>
+
+<INSTRUCTIONS>
+To complete the task, you need to follow these steps:
+1. Analyze the provided technical snippets for the given keyword
+2. Extract core synonyms that appear in the snippets and retain the same technical function
+3. Identify related terms that are broader, adjacent, or complementary to the keyword
+4. Provide justifications for each term based on snippet evidence
+5. Format the output as two distinct JSON lists
+</INSTRUCTIONS>
+
+<CONSTRAINTS>
+Do:
+- Include only terms that appear (exactly or inflected) in at least one snippet for core synonyms
+- Ensure core synonyms retain the same technical function as the original keyword
+- Limit core synonyms to 5-8 terms maximum
+- Limit related terms to 5 terms maximum
+- Provide clear justifications (≤10 words) for each core synonym
+- Provide rationale for each related term
+- Reference source snippet numbers for all terms
+
+Don't:
+- Don't include terms not found in the provided snippets for core synonyms
+- Don't list full synonyms in the related terms section
+- Don't exceed the specified term limits
+- Don't provide justifications longer than 10 words for core synonyms
+- Don't include terms without proper source attribution
+</CONSTRAINTS>
+
+<CONTEXT>
+Keyword: {keyword}
+Field Description: {context}
+
+Technical Snippets:
+{snippets}
+</CONTEXT>
+
+<OUTPUT_FORMAT>
+{format_instructions}
+</OUTPUT_FORMAT>
+
+<RECAP>
+Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. Core synonyms must appear in snippets and retain identical technical function. Related terms should be broader/adjacent concepts. All terms require source attribution and justification. IMPORTANT: Only generate the JSON output as defined - do not provide explanations, commentary, or any additional text beyond the required JSON format.
+</RECAP>
+""",
+            input_variables=["keyword", "context", "snippets"],
+            partial_variables={"format_instructions": parser.get_format_instructions()}
+        )
+        return prompt, parser
 
     @staticmethod
     def get_normalization_prompt_and_parser():
@@ -74,11 +165,11 @@ Your extraction must preserve maximum fidelity to the input, capturing all expli
 2. For the "problem":
    - Identify only what is explicitly described as the problem, challenge, limitation, or requirement.
    - Include all explicit technical constraints, requirements, and context.
-   - If no problem is mentioned, output exactly: "Not mentioned."
+   - If no problem is mentioned, Leave output blank
 3. For the "technical":
    - Identify only the explicitly proposed technical solution, method, or approach.
    - Include all explicit technical details, mechanisms, components, steps, and context.
-   - If no technical solution is mentioned, output exactly: "Not mentioned."
+   - If no technical solution is mentioned, Leave output blank
 4. Use direct quotations from the input whenever possible. If necessary for readability, you may minimally reassemble fragmented text, but do not infer or add unstated information.
 5. If multiple distinct explicit details are present, include all of them clearly.
 6. Do not generalize, summarize, or explain beyond what is explicitly written in the input.
@@ -94,7 +185,7 @@ Input idea:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Extract and return only the JSON output with exactly two fields: "problem" and "technical". Each field must include every explicit detail from the input. If a field is not mentioned, use "Not mentioned." Do not add any extra explanation or text outside the JSON.
+Extract and return only the JSON output with exactly two fields: "problem" and "technical". Each field must include every explicit detail from the input." Do not add any extra explanation or text outside the JSON.
 </RECAP>
 """,
             input_variables=["input"],
@@ -117,7 +208,7 @@ You are a patent concept extraction specialist with expertise in identifying pre
 2. For each Concept Matrix field, extract only explicit information stated in the text, preserving exact terminology and context.
 3. Do not infer, generalize, summarize, or rephrase beyond the explicit wording of the document.
 4. Ensure each field contains unique, non-overlapping content; do not duplicate or recycle text across fields.
-5. If a Concept Matrix field is not explicitly mentioned in the document, output exactly: "Not mentioned."
+5. If a Concept Matrix field is not explicitly mentioned in the document, Leave output blank.
 </INSTRUCTIONS>
 
 <CONCEPT MATRIX FIELDS>
@@ -130,7 +221,7 @@ You are a patent concept extraction specialist with expertise in identifying pre
 - Use only terminology, context, and descriptions exactly as written in the provided text.
 - Do not infer, add unstated details, or use synonyms.
 - Each Concept Matrix field must be strictly unique and non-redundant relative to the others.
-- If no explicit information is available for a field, return "Not mentioned."
+- If no explicit information is available for a field, Leave output blank
 </CONSTRAINTS>
 
 <CONTEXT>
@@ -148,7 +239,7 @@ Document:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Return only the JSON output. Each must contain only explicit details from the input document. If a field is missing, return "Not mentioned." Do not include explanations, comments, or text outside of the JSON.
+Return only the JSON output. Each must contain only explicit details from the input document. If a field is missing, Leave output blank. Do not include explanations, comments, or text outside of the JSON.
 </RECAP>
 """,
             input_variables=["input_text"],
@@ -205,7 +296,7 @@ Feedback:
 </OUTPUT_FORMAT>
 
 <RECAP>
-Extract explicit, precise, discriminative keywords (strictly 1–2 words) for each Concept Matrix component. Ensure uniqueness across components. If a field has no explicit keyword, return "Not mentioned." Output strictly in the defined JSON format with no explanations or extra text.
+Extract explicit, precise, discriminative keywords (strictly 1–2 words) for each Concept Matrix component. Ensure uniqueness across components. If a field has no explicit keyword, Leave output blank. Output strictly in the defined JSON format with no explanations or extra text.
 </RECAP>
 """,
             input_variables=["problem_purpose", "object_system", "environment_field", "feedback"],

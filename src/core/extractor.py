@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from typing import Dict, List, TypedDict, Annotated, Optional
 from langchain_community.llms import Ollama
+from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain.tools import Tool
@@ -133,7 +134,12 @@ class CoreConceptExtractor:
         self.model_name = model_name if model_name is not None else settings.DEFAULT_MODEL_NAME
         self.use_checkpointer = use_checkpointer if use_checkpointer is not None else settings.USE_CHECKPOINTER
 
-        self.llm = Ollama(model=self.model_name, temperature=settings.MODEL_TEMPERATURE, num_ctx=settings.NUM_CTX)
+        self.llm = ChatOpenAI(
+            model_name="qwen/qwen-2.5-72b-instruct:free",
+            temperature=0.7,
+            openai_api_key="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",
+            base_url="https://openrouter.ai/api/v1"
+        )
         self.tavily_search = TavilySearch(
             max_results=settings.MAX_SEARCH_RESULTS,
             topic="general",
@@ -223,7 +229,7 @@ class CoreConceptExtractor:
         """Normalize and clean input text before processing"""    
         # Get normalization prompt and parser from ExtractionPrompts
         prompt, parser = self.prompts.get_normalization_prompt_and_parser()
-        response = self.llm.invoke(prompt.format(input=state["input_text"]))
+        response = self.llm.invoke(prompt.format(input=state["input_text"])).content
 
         try:
             normalized_data = parser.parse(response)
@@ -260,7 +266,7 @@ class CoreConceptExtractor:
         # Use normalized problem for concept extraction if available
 
         prompt, parser = self.prompts.get_phase1_prompt_and_parser()
-        response = self.llm.invoke(prompt.format(problem=state["problem"]))
+        response = self.llm.invoke(prompt.format(problem=state["problem"])).content
         
         try:
             concept_data = parser.parse(response)
@@ -284,7 +290,7 @@ class CoreConceptExtractor:
             object_system=concept_matrix.object_system,
             environment_field=concept_matrix.environment_field,
             feedback=feedback
-        ))
+        )).content
         
         try:
             keyword_data = parser.parse(response)
@@ -402,133 +408,50 @@ class CoreConceptExtractor:
         return feedback.action if feedback else "approve"
     
     def gen_key(self, state: ExtractionState) -> ExtractionState:
-        """Generate synonyms and related terms for keywords"""
+        """Generate synonyms and related terms for keywords (structured output)"""
         def search_snippets(keyword: str, max_snippets: int = 3) -> List[str]:
-            results = self.tavily_search.invoke({"query": keyword})
-            snippets = [r['content'] for r in results.get("results", [])[:max_snippets]]
-            return snippets
+            try:
+                results = self.tavily_search.invoke({"query": keyword})
+                snippets = [r['content'] for r in results.get("results", [])[:max_snippets]]
+                return snippets
+            except Exception as e:
+                logger.error(f"Error searching snippets for keyword '{keyword}': {e}")
+                return []
 
-        prompt_template = """
-<OBJECTIVE_AND_PERSONA>
-You are a patent linguist specializing in technical terminology analysis. Your task is to analyze provided technical snippets and extract high-precision synonyms and related terms for patent search optimization.
-</OBJECTIVE_AND_PERSONA>
-
-<INSTRUCTIONS>
-To complete the task, you need to follow these steps:
-1. Analyze the provided technical snippets for the given keyword
-2. Extract core synonyms that appear in the snippets and retain the same technical function
-3. Identify related terms that are broader, adjacent, or complementary to the keyword
-4. Provide justifications for each term based on snippet evidence
-5. Format the output as two distinct JSON lists
-</INSTRUCTIONS>
-
-<CONSTRAINTS>
-Do:
-- Include only terms that appear (exactly or inflected) in at least one snippet for core synonyms
-- Ensure core synonyms retain the same technical function as the original keyword
-- Limit core synonyms to 5-8 terms maximum
-- Limit related terms to 5 terms maximum
-- Provide clear justifications (≤10 words) for each core synonym
-- Provide rationale for each related term
-- Reference source snippet numbers for all terms
-
-Don't:
-- Don't include terms not found in the provided snippets for core synonyms
-- Don't list full synonyms in the related terms section
-- Don't exceed the specified term limits
-- Don't provide justifications longer than 10 words for core synonyms
-- Don't include terms without proper source attribution
-</CONSTRAINTS>
-
-<CONTEXT>
-Keyword: {keyword}
-Field Description: {context}
-
-Technical Snippets:
-{snippets}
-</CONTEXT>
-
-<OUTPUT_FORMAT>
-The output format must be JSON format:
-{{
-    "core_synonyms": [
-        {{
-            "term": "example_term",
-            "justification": "appears frequently with same technical meaning",
-            "source": "src 1"
-        }}
-    ],
-    "related_terms": [
-        {{
-            "term": "broader_term",
-            "rationale": "encompasses the keyword within larger technical context",
-            "source": "src 2"
-        }}
-    ]
-}}
-</OUTPUT_FORMAT>
-
-<RECAP>
-Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. Core synonyms must appear in snippets and retain identical technical function. Related terms should be broader/adjacent concepts. All terms require source attribution and justification. IMPORTANT: Only generate the JSON output as defined - do not provide explanations, commentary, or any additional text beyond the required JSON format.
-</RECAP>
-        """
-
-        prompt = PromptTemplate.from_template(prompt_template)
-        chain = LLMChain(llm=self.llm, prompt=prompt)
+        prompt, parser = self.prompts.get_synonym_extraction_prompt_and_parser()
         sys_keys = {}
 
         def generate_synonyms(keyword: str, context: str):
             logger.info(f"🔍 Searching snippets for keyword: {keyword}")
             snippets = search_snippets(keyword)
+
             if not snippets:
                 logger.warning(f"❌ No snippets found for keyword: {keyword}")
                 return
 
             formatted_snippets = "\n".join([f"[{i+1}] {s}" for i, s in enumerate(snippets)])
-            result = chain.run({
-                "keyword": keyword,
-                "snippets": formatted_snippets,
-                "context": context,
-            })
-            
+            response = self.llm.invoke(prompt.format(
+                keyword=keyword,
+                context=context,
+                snippets=formatted_snippets
+            )).content
+
             try:
-                # Try to parse JSON response
-                result_clean = result.strip()
-                if result_clean.startswith("```json"):
-                    result_clean = result_clean.replace("```json", "").replace("```", "")
-                
-                parsed_result = json.loads(result_clean)
-                
-                # Extract terms from both core synonyms and related terms
+                parsed_result = parser.parse(response)
+                # Collect all terms (core_synonyms + related_terms) as flat list of term strings
                 res = []
-                
-                # Add core synonyms
-                if "core_synonyms" in parsed_result:
-                    for item in parsed_result["core_synonyms"]:
-                        if isinstance(item, dict) and "term" in item:
-                            res.append(item["term"])
-                        elif isinstance(item, str):
-                            res.append(item)
-                
-                # Add related terms
-                if "related_terms" in parsed_result:
-                    for item in parsed_result["related_terms"]:
-                        if isinstance(item, dict) and "term" in item:
-                            res.append(item["term"])
-                        elif isinstance(item, str):
-                            res.append(item)
-                
+                if hasattr(parsed_result, "core_synonyms"):
+                    res.extend([item.term for item in parsed_result.core_synonyms])
+                if hasattr(parsed_result, "related_terms"):
+                    res.extend([item.term for item in parsed_result.related_terms])
                 sys_keys[keyword] = res
                 logger.info(f"✅ Extracted {len(res)} terms for '{keyword}': {res}")
-                
-            except (json.JSONDecodeError, KeyError) as e:
-                logger.warning(f"⚠️ JSON parsing failed for '{keyword}': {e}")
-                logger.debug(f"Raw result: {result}")
-                
+            except Exception as e:
+                logger.warning(f"⚠️ Structured parsing failed for '{keyword}': {e}")
+                logger.debug(f"Raw result: {response}")
                 # Fallback to original parsing method
-                syn_raw = result
+                syn_raw = response
                 raws = syn_raw.split("\n")
-
                 st = 0
                 et = 0
                 for i in range(len(raws)):
@@ -546,16 +469,13 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
                         res.append(item.split("—")[0].split(".")[1].strip())
                     except:
                         pass
-
                 sys_keys[keyword] = res
 
         concept_matrix = state["concept_matrix"].dict()
         seed_keywords = state["seed_keywords"].dict()
-
         for context in concept_matrix:
             for key in seed_keywords[context]:
                 generate_synonyms(key, concept_matrix[context])
-
         return {"final_keywords": sys_keys}
 
     def summary_prompt_and_parser(self, state: ExtractionState) -> ExtractionState:
@@ -567,7 +487,7 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
         #     response = self.llm.invoke(prompt.format(input_text=input_text))
         # else:
         #     response = self.llm.invoke(prompt.format(idea=state["input_text"]))
-        response = self.llm.invoke(prompt.format(idea=state["input_text"]))
+        response = self.llm.invoke(prompt.format(idea=state["input_text"])).content
 
         concept_data = parser.parse(response)
         
@@ -595,7 +515,7 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
             object_system_keys=object_system_keys,
             environment_field_keys=environment_field_keys,
             CPC_CODES=fipc
-        ))
+        )).content
 
         concept_data = parser.parse(response)
         logger.info(f"🔍 Generated {len(concept_data.queries)} search queries")
@@ -650,7 +570,7 @@ Extract 5-8 core synonyms and up to 5 related terms from the provided snippets. 
                 result = parse_idea_input(state["input_text"])
                 temp = lay_thong_tin_patent(url)
                 ex_text = prompt(temp['abstract'], temp['description'], temp['claims'])
-                res = self.llm.invoke(ex_text)
+                res = self.llm.invoke(ex_text).content
                 logger.debug(f"📄 LLM evaluation response for {url}: {res}")
                 
                 res = res.replace("```json", '')
