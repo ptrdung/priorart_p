@@ -2,6 +2,11 @@ import streamlit as st
 import json
 from src.core.extractor import CoreConceptExtractor
 
+def handle_approve(session_state):
+    """Handle approve button click event"""
+    session_state.handle_approve = True
+    session_state.action_taken = True
+
 st.set_page_config(
     page_title="Patent AI Agent",
     page_icon="🔍",
@@ -171,31 +176,40 @@ def main():
                         st.markdown("---")
                         col1, col2, col3 = st.columns([1,1,2])
                         
-                        # Add rejection feedback field if needed
-                        reject_feedback = None
+                        # Initialize action states if not exists
+                        if 'action_taken' not in st.session_state:
+                            st.session_state.action_taken = False
                         if "show_reject_feedback" not in st.session_state:
                             st.session_state.show_reject_feedback = False
 
                         with col1:
-                            approve_button = st.button(
+                            st.button(
                                 "✅ Chấp nhận", 
                                 type="primary", 
                                 disabled=st.session_state.phase == "completed",
-                                key="approve_button"
+                                key="approve_button",
+                                on_click=lambda: handle_approve(st.session_state)
                             )
-                            if approve_button:
-                                # Cập nhật validation feedback
-                                validation_feedback = {
-                                    "action": "approve",
-                                    "feedback": None,
-                                    "edited_keywords": None
-                                }
-                                
-                                # Cập nhật state hiện tại với feedback
-                                current_state = st.session_state.current_state.copy()
-                                current_state["validation_feedback"] = validation_feedback
-                                
-                                # Chạy tiếp pipeline với state đã cập nhật
+
+                        # Handle approve action if triggered
+                        if hasattr(st.session_state, 'handle_approve') and st.session_state.handle_approve:
+                            st.session_state.handle_approve = False  # Reset flag
+                            
+                            # Cập nhật validation feedback
+                            validation_feedback = {
+                                "action": "approve",
+                                "feedback": None,
+                                "edited_keywords": None
+                            }
+                            
+                            # Cập nhật state hiện tại với feedback
+                            current_state = st.session_state.current_state.copy()
+                            current_state["validation_feedback"] = validation_feedback
+                            
+                            st.info("Đang tiếp tục xử lý với từ khóa đã chấp nhận...")
+                            
+                            # Chạy tiếp pipeline với state đã cập nhật
+                            try:
                                 results = st.session_state.extractor.extract_keywords(
                                     input_text,
                                     continue_from_state=current_state,
@@ -206,7 +220,10 @@ def main():
                                 st.session_state.current_state = results
                                 st.session_state.validation_feedback = validation_feedback
                                 st.session_state.phase = "completed"
-                                st.rerun()
+                                st.experimental_rerun()
+                            except Exception as e:
+                                st.error(f"Lỗi khi xử lý pipeline: {str(e)}")
+                                st.session_state.phase = "evaluation"  # Reset phase on error
                                 
                         with col2:
                             reject_button = st.button(
